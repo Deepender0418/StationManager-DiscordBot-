@@ -191,13 +191,17 @@ async def on_invite_delete(invite):
 # pinging
 from flask import Flask, request
 from threading import Thread
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 
 # Flask web server for UptimeRobot pings
 app = Flask('')
 
 @app.route('/')
 def home():
-    print(f"[{datetime.now()}] Ping received from {request.remote_addr}")
+    logging.info(f"[{datetime.now()}] Ping received from {request.remote_addr}")
     return "Discord Bot is Alive!"
 
 def run_webserver():
@@ -207,8 +211,7 @@ def keep_alive():
     server_thread = Thread(target=run_webserver)
     server_thread.daemon = True
     server_thread.start()
-
-
+    
 
 # Start the web server
 keep_alive()
