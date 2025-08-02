@@ -10,8 +10,15 @@ logger = logging.getLogger(__name__)
 class BirthdayCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.birthday_task.start()
+        # FIX: Create the task without starting it in __init__
+        self.birthday_task = tasks.loop(time=time(hour=0, minute=0, tzinfo=IST))(self._birthday_task)
         logger.info("Birthday cog initialized")
+    
+    # FIX: Start the task in on_ready instead of __init__
+    @commands.Cog.listener()
+    async def on_ready(self):
+        self.birthday_task.start()
+        logger.info("Birthday task started")
     
     @commands.Cog.listener()
     async def on_member_join(self, member):
@@ -126,7 +133,7 @@ class BirthdayCog(commands.Cog):
             logger.error(f"Error deleting birthday: {str(e)}")
     
     @tasks.loop(time=time(hour=0, minute=0, tzinfo=IST))
-    async def birthday_task(self):
+    async def _birthday_task(self):
         try:
             now = datetime.now(IST)
             today = now.strftime("%m-%d")
@@ -176,7 +183,8 @@ class BirthdayCog(commands.Cog):
         except Exception as e:
             logger.error(f"Birthday task error: {str(e)}")
     
-    @birthday_task.before_loop
+    # FIX: Use the correct before_loop signature
+    @_birthday_task.before_loop
     async def before_birthday_task(self):
         await self.bot.wait_until_ready()
         logger.info("Birthday task is ready")
