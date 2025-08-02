@@ -1,6 +1,7 @@
 import os
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 from datetime import datetime, timedelta, timezone, time
 import motor.motor_asyncio
 from dotenv import load_dotenv
@@ -21,7 +22,7 @@ ADMIN_SECRET = os.getenv('ADMIN_SECRET', 'default-secret')
 # Create IST timezone (UTC+5:30)
 IST = timezone(timedelta(hours=5, minutes=30))
 
-# Set up logging with IST timezone
+# Configure logging with IST timezone
 class ISTFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
         dt = datetime.fromtimestamp(record.created, IST)
@@ -149,32 +150,15 @@ def status():
         "next_birthday_check": ist_now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
     }
 
-@app.route('/debug')
-def debug_info():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    all_configs = list(loop.run_until_complete(guild_configs.find().to_list(None)))
-    loop.close()
-    
-    configs_json = JSONEncoder().encode(all_configs)
-    
-    return f"""
-    <h1>Debug Information</h1>
-    <p>Bot Status: {'Online' if bot.is_ready() else 'Offline'}</p>
-    <p>Guilds: {len(bot.guilds)}</p>
-    <h2>Server Configurations:</h2>
-    <pre>{json.dumps(json.loads(configs_json), indent=2)}</pre>
-    """
-
 # =====================================
-# DISCORD BOT EVENTS AND COMMANDS
+# DISCORD COMMANDS AND EVENTS
 # =====================================
 
 start_time = datetime.now(IST)
 
 @bot.event
 async def on_ready():
-    logger.info(f'Logged in as {bot.user}')
+    logger.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
     await cache_invites()
     if not birthday_task.is_running():
         birthday_task.start()
@@ -255,10 +239,37 @@ async def on_member_remove(member):
             })
             await log_channel.send(f"❌ **Left**: {member.mention}")
 
-@bot.command()
+# =====================================
+# COMMAND TEMPLATES
+# =====================================
+
+@bot.tree.command(name="config", description="Configure bot channels")
+@app_commands.describe(
+    channel_type="Type of channel to configure",
+    channel="The channel to set"
+)
 @commands.has_permissions(manage_guild=True)
-async def config(ctx, channel_type: str, channel: discord.TextChannel):
-    """Set configuration channels (welcome, log, announcement)"""
+async def config_slash(interaction: discord.Interaction, channel_type: str, channel: discord.TextChannel):
+    """Slash command version of config"""
+    valid_types = ['welcome', 'log', 'announcement']
+    if channel_type.lower() not in valid_types:
+        await interaction.response.send_message(
+            f"Invalid channel type. Valid types: {', '.join(valid_types)}",
+            ephemeral=True
+        )
+        return
+    
+    field_name = f"{channel_type.lower()}_channel_id"
+    await update_guild_config(interaction.guild.id, {field_name: str(channel.id)})
+    await interaction.response.send_message(
+        f"✅ Set {channel_type} channel to {channel.mention}",
+        ephemeral=True
+    )
+
+@bot.command(name="config", aliases=["setchannel"])
+@commands.has_permissions(manage_guild=True)
+async def config_prefix(ctx, channel_type: str, channel: discord.TextChannel):
+    """Configure bot channels"""
     valid_types = ['welcome', 'log', 'announcement']
     if channel_type.lower() not in valid_types:
         await ctx.send(f"Invalid channel type. Valid types: {', '.join(valid_types)}")
@@ -268,13 +279,44 @@ async def config(ctx, channel_type: str, channel: discord.TextChannel):
     await update_guild_config(ctx.guild.id, {field_name: str(channel.id)})
     await ctx.send(f"✅ Set {channel_type} channel to {channel.mention}")
 
-@bot.command()
+@bot.tree.command(name="birthday", description="Set a user's birthday")
+@app_commands.describe(
+    member="The user to set birthday for",
+    date="Birthday in MM-DD format"
+)
 @commands.has_permissions(administrator=True)
-async def setbirthday(ctx, member: discord.Member, date: str):
-    """Set a user's birthday (Admin only) MM-DD format"""
+async def set_birthday_slash(interaction: discord.Interaction, member: discord.Member, date: str):
+    """Set a user's birthday (Admin only)"""
     try:
         month, day = map(int, date.split('-'))
-        datetime.now(IST).replace(year=2020, month=month, day=day)  # Validate in IST
+        datetime.now(IST).replace(year=2020, month=month, day=day)
+        birthday = f"{month:02d}-{day:02d}"
+        
+        await birthdays.update_one(
+            {"user_id": member.id, "guild_id": interaction.guild.id},
+            {"$set": {"birthday": birthday}},
+            upsert=True
+        )
+        
+        await interaction.response.send_message(f"🎂 Birthday for {member.mention} set to {date}!")
+    except (ValueError, IndexError):
+        await interaction.response.send_message(
+            "Invalid date format. Use MM-DD (e.g., 12-31)",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            f"Error: {str(e)}",
+            ephemeral=True
+        )
+
+@bot.command(name="setbirthday", aliases=["bday"])
+@commands.has_permissions(administrator=True)
+async def set_birthday_prefix(ctx, member: discord.Member, date: str):
+    """Set a user's birthday (Admin only)"""
+    try:
+        month, day = map(int, date.split('-'))
+        datetime.now(IST).replace(year=2020, month=month, day=day)
         birthday = f"{month:02d}-{day:02d}"
         
         await birthdays.update_one(
@@ -289,17 +331,62 @@ async def setbirthday(ctx, member: discord.Member, date: str):
     except Exception as e:
         await ctx.send(f"Error: {str(e)}")
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def deletebirthday(ctx, member: discord.Member):
-    """Delete a user's birthday (Admin only)"""
-    result = await birthdays.delete_one(
-        {"user_id": member.id, "guild_id": ctx.guild.id}
-    )
-    if result.deleted_count > 0:
-        await ctx.send(f"🎂 Birthday for {member.mention} deleted!")
+@bot.command(name="help")
+async def custom_help(ctx, command_name: str = None):
+    """Show all commands or details about a specific command"""
+    command_templates = {
+        "config": {
+            "description": "Set channel configurations",
+            "usage": "!config <type> <channel>",
+            "examples": ["!config welcome #welcome-channel", "!config log #mod-logs"],
+            "types": ["welcome", "log", "announcement"]
+        },
+        "setbirthday": {
+            "description": "Set a user's birthday (Admin only)",
+            "usage": "!setbirthday @user MM-DD",
+            "examples": ["!setbirthday @John 05-15"]
+        },
+        "sync": {
+            "description": "Sync slash commands (Owner only)",
+            "usage": "!sync",
+            "examples": []
+        }
+    }
+
+    if command_name:
+        cmd = command_templates.get(command_name.lower())
+        if cmd:
+            embed = discord.Embed(title=f"Help: {command_name}", color=0x00ff00)
+            embed.add_field(name="Description", value=cmd["description"], inline=False)
+            embed.add_field(name="Usage", value=f"`{cmd['usage']}`", inline=False)
+            if "examples" in cmd:
+                embed.add_field(name="Examples", 
+                              value="\n".join([f"`{ex}`" for ex in cmd["examples"]]), 
+                              inline=False)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Command not found. Use `!help` for all commands.")
     else:
-        await ctx.send("No birthday record found for this user.")
+        embed = discord.Embed(title="Command Help", color=0x00ff00)
+        for name, info in command_templates.items():
+            embed.add_field(name=name, 
+                          value=f"{info['description']}\nUsage: `{info['usage']}`", 
+                          inline=False)
+        await ctx.send(embed=embed)
+
+@bot.command()
+@commands.is_owner()
+async def sync(ctx):
+    """Sync slash commands globally (Bot owner only)"""
+    try:
+        await bot.tree.sync()
+        await ctx.send("✅ Slash commands synced globally!")
+    except Exception as e:
+        await ctx.send(f"❌ Error: {e}")
+
+# =====================================
+# TASKS AND BACKGROUND PROCESSES
+# =====================================
 
 @tasks.loop(time=time(hour=0, minute=0, tzinfo=IST))  # Midnight IST
 async def birthday_task():
@@ -326,21 +413,8 @@ async def birthday_task():
 async def birthday_task_error(error):
     logger.error(f"Birthday task failed: {error}")
 
-@bot.event
-async def on_invite_create(invite):
-    guild_id = invite.guild.id
-    if guild_id not in invite_cache:
-        invite_cache[guild_id] = {}
-    invite_cache[guild_id][invite.code] = invite
-
-@bot.event
-async def on_invite_delete(invite):
-    guild_id = invite.guild.id
-    if guild_id in invite_cache and invite.code in invite_cache[guild_id]:
-        del invite_cache[guild_id][invite.code]
-
 # =====================================
-# TEMPLATE AND WEB SERVER SETUP
+# TEMPLATES AND WEB SERVER
 # =====================================
 
 def run_flask():
@@ -424,7 +498,7 @@ with open('templates/config.html', 'w') as f:
         <p>Next birthday check: <span id="next-check">Loading...</span></p>
     </div>
     
-    <p><a href="/debug">View Debug Information</a></p>
+    <p><a href="/status" target="_blank">View Status</a></p>
     
     <script>
         function updateTimes() {
@@ -449,6 +523,23 @@ with open('templates/config.html', 'w') as f:
 </body>
 </html>
 """)
+
+# =====================================
+# ERROR HANDLING
+# =====================================
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("⛔ You don't have permission to use this command!")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        cmd = ctx.command
+        await ctx.send(f"❌ Missing argument!\nUsage: `{cmd.usage if hasattr(cmd, 'usage') else cmd.signature}`")
+    else:
+        logger.error(f"Error in command '{ctx.command}': {error}", exc_info=True)
+        await ctx.send(f"⚠️ An error occurred: {str(error)}")
 
 # =====================================
 # START APPLICATION
