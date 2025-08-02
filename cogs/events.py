@@ -16,8 +16,8 @@ class EventsCog(commands.Cog):
         self.event_task.start()
         logger.info("Events cog initialized")
     
-    # @tasks.loop(time=time(hour=8, minute=0, tzinfo=IST))  # Use your timezone
-    @tasks.loop(time=time(hour=22, minute=37, tzinfo=IST))  # Use your timezone
+    # @tasks.loop(time=time(hour=22, minute=37, tzinfo=IST))  # Use your timezone
+    @tasks.loop(time=time(hour=8, minute=0, tzinfo=IST))  # Use your timezone
     async def event_task(self):
         try:
             today = datetime.now().strftime("%m-%d")
@@ -98,4 +98,5 @@ class EventsCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(EventsCog(bot))
+
     logger.info("Events cog setup complete")
