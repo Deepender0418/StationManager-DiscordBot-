@@ -3,22 +3,25 @@ from discord.ext import commands, tasks
 from datetime import datetime, time
 import aiohttp
 import logging
-from utils import database
-import json
-import os
-from utils.timezone import IST  # Add this import
+from utils.timezone import IST
 
 logger = logging.getLogger(__name__)
 
 class EventsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.event_task.start()
+        # FIX: Create the task without starting it in __init__
+        self.event_task = tasks.loop(time=time(hour=8, minute=0, tzinfo=IST))(self._event_task)
         logger.info("Events cog initialized")
     
-    # @tasks.loop(time=time(hour=22, minute=37, tzinfo=IST))  # Use your timezone
-    @tasks.loop(time=time(hour=8, minute=0, tzinfo=IST))  # Use your timezone
-    async def event_task(self):
+    # FIX: Start the task in on_ready instead of __init__
+    @commands.Cog.listener()
+    async def on_ready(self):
+        self.event_task.start()
+        logger.info("Events task started")
+    
+    # FIX: Rename the task method to avoid conflict
+    async def _event_task(self):
         try:
             today = datetime.now().strftime("%m-%d")
             logger.info(f"Running daily events check for {today}")
@@ -91,12 +94,12 @@ class EventsCog(commands.Cog):
         message += "\nHave a great day everyone! 😊"
         return message
     
-    @event_task.before_loop
+    # FIX: Use the correct before_loop signature
+    @_event_task.before_loop
     async def before_event_task(self):
         await self.bot.wait_until_ready()
         logger.info("Events task is ready")
 
 async def setup(bot):
     await bot.add_cog(EventsCog(bot))
-
     logger.info("Events cog setup complete")
