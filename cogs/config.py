@@ -168,11 +168,11 @@ class ConfigCog(commands.Cog):
                 inline=False
             )
             
-            embed.add_field(
-                name="⚙️ **Easy Management**",
-                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🛠️ **Simple commands** to set up channels\n• 🌐 **Web interface** for easy configuration\n• 🧪 **Admin commands** for testing features\n• 🎯 **Everything designed** to be user-friendly\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                inline=False
-            )
+            # embed.add_field(
+            #     name="⚙️ **Easy Management**",
+            #     value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🛠️ **Simple commands** to set up channels\n• 🌐 **Web interface** for easy configuration\n• 🧪 **Admin commands** for testing features\n• 🎯 **Everything designed** to be user-friendly\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            #     inline=False
+            # )
             
             # Add a closing quote
             embed.add_field(
@@ -199,3 +199,4 @@ class ConfigCog(commands.Cog):
 async def setup(bot):
     await bot.add_cog(ConfigCog(bot))
     logger.info("Config cog setup complete")
+
