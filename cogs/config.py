@@ -134,42 +134,56 @@ class ConfigCog(commands.Cog):
                 await ctx.send("❌ Announcement channel not found! It might have been deleted.", ephemeral=True)
                 return
             
-            # Create casual and friendly bot introduction
+            # Create casual and friendly bot introduction with new beginning quote
             embed = discord.Embed(
-                title="Hey everyone! 👋",
-                description="**I'm your friendly Server Manager Bot, and I'm super excited to be here with you all!**\n\nI'm here to make this server awesome and help create a great community experience. Here's what I can do for you:",
-                color=discord.Color.green(),
+                title="🌟 A New Beginning Awaits! 🌟",
+                description="*\"Every great journey begins with a single step, and every amazing community starts with a warm welcome.\"* ✨\n\n**Hey everyone! 👋**\n\nI'm your friendly **Server Manager Bot**, and I'm super excited to be here with you all! I'm here to make this server awesome and help create a great community experience. Here's what I can do for you:",
+                color=discord.Color.purple(),
                 timestamp=ctx.message.created_at
             )
             
-            # Casual features with bullet points
+            # Add a beautiful quote section
             embed.add_field(
-                name="🎂 Birthday Celebrations",
-                value="• I automatically celebrate birthdays at midnight!\n• Set up birthdays with `/birthday @user MM-DD`\n• I'll send beautiful birthday announcements with custom messages\n• Each person gets their own special birthday card",
+                name="💫 Our Mission",
+                value="*\"Building connections, celebrating moments, and creating memories together.\"*",
+                inline=False
+            )
+            
+            # Casual features with bullet points and better formatting
+            embed.add_field(
+                name="🎂 **Birthday Celebrations**",
+                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🕛 **Automatic celebrations** at midnight!\n• 📝 **Easy setup** with `/birthday MM-DD`\n• 🎨 **Beautiful announcements** with custom messages\n• 🎁 **Individual birthday cards** for each person\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
                 inline=False
             )
             
             embed.add_field(
-                name="📅 Daily Events & Fun",
-                value="• Every morning at 8 AM, I share what's special today!\n• From holidays to fun observances, I keep you informed\n• Learn about daily events and celebrations\n• Never miss a special day again!",
+                name="📅 **Daily Events & Fun**",
+                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🌅 **Morning updates** at 8 AM every day!\n• 🎉 **Holidays & observances** to keep you informed\n• 📚 **Learn about special events** and celebrations\n• ⏰ **Never miss** a special day again!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
                 inline=False
             )
             
             embed.add_field(
-                name="🌟 Welcome New Friends",
-                value="• I warmly welcome new members to our community\n• Beautiful, respectful welcome cards for everyone\n• Makes new members feel valued and appreciated\n• Helps create a friendly atmosphere",
+                name="🌟 **Welcome New Friends**",
+                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🤗 **Warm welcomes** for new members\n• 🎨 **Beautiful, respectful** welcome cards\n• 💝 **Makes everyone feel valued** and appreciated\n• 🌈 **Creates a friendly atmosphere** for all\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
                 inline=False
             )
             
             embed.add_field(
-                name="⚙️ Easy Management",
-                value="• Simple commands to set up channels\n• Web interface for easy configuration\n• Admin commands for testing features\n• Everything designed to be user-friendly",
+                name="⚙️ **Easy Management**",
+                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🛠️ **Simple commands** to set up channels\n• 🌐 **Web interface** for easy configuration\n• 🧪 **Admin commands** for testing features\n• 🎯 **Everything designed** to be user-friendly\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
                 inline=False
             )
             
-            # Set footer with casual tone
+            # Add a closing quote
+            embed.add_field(
+                name="💝 **Together We Grow**",
+                value="*\"The best communities are built on friendship, celebration, and shared moments.\"* 🌟",
+                inline=False
+            )
+            
+            # Set footer with casual tone and better formatting
             embed.set_footer(
-                text=f"🤖 {self.bot.user.name} • Your friendly server assistant! Feel free to ask for help anytime!",
+                text=f"🤖 {self.bot.user.name} • Your friendly server assistant! Feel free to ask for help anytime! ✨",
                 icon_url=self.bot.user.avatar.url if self.bot.user.avatar else self.bot.user.default_avatar.url
             )
             
