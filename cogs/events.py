@@ -113,7 +113,7 @@ class EventsCog(commands.Cog):
                 except Exception as e:
                     logger.error(f"Error with API {api_url}: {str(e)}")
                     continue
-            
+                
             # Check known holidays fallback
             if date_str in known_holidays:
                 logger.info(f"Using known holidays for {date_str}")
@@ -129,7 +129,7 @@ class EventsCog(commands.Cog):
                 }
             ]
             return fallback_events
-            
+                
         except Exception as e:
             logger.error(f"Error fetching daily events: {str(e)}")
             return []
@@ -246,4 +246,4 @@ class EventsCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(EventsCog(bot))
-    logger.info("Events cog setup complete") 
+    logger.info("Events cog setup complete")
