@@ -193,9 +193,7 @@ class EventsCog(commands.Cog):
     async def test_events(self, ctx):
         """Test the daily events announcement"""
         try:
-            await ctx.send("📅 Testing daily events announcement...", ephemeral=True)
-            
-            # Get guild config
+            # First check if announcement channel is configured
             config = await get_guild_config(self.bot.guild_configs, str(ctx.guild.id))
             announcement_channel_id = config.get('announcement_channel_id') if config else None
             
@@ -207,6 +205,8 @@ class EventsCog(commands.Cog):
             if not announcement_channel:
                 await ctx.send("❌ Announcement channel not found! It might have been deleted.", ephemeral=True)
                 return
+            
+            await ctx.send("📅 Testing daily events announcement...", ephemeral=True)
             
             # Fetch and send events
             events = await self.fetch_daily_events()
