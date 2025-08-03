@@ -1,40 +1,170 @@
+#!/usr/bin/env python3
+"""
+Config cog - Server configuration management
+"""
+
 import discord
 from discord.ext import commands
 import logging
-from utils import database
+from utils.database import get_guild_config
 
 logger = logging.getLogger(__name__)
 
 class ConfigCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        logging.info("Config cog initialized")
-
-    @commands.hybrid_command(name="config", description="Configure bot channels")
-    @commands.has_permissions(manage_guild=True)
-    async def config_command(self, ctx, channel_type: str, channel: discord.TextChannel):
-        valid_types = ['welcome', 'log', 'announcement']  # Added 'announcement'
-        channel_type = channel_type.lower()
+        logger.info("Config cog initialized")
         
-        if channel_type not in valid_types:
-            await ctx.send(
-                f"Invalid channel type. Valid types: {', '.join(valid_types)}",
-                ephemeral=True
-            )
+        # Array of different welcome messages that rotate
+        self.welcome_messages = [
+            "We're delighted to have you join our community! Your presence here is truly valued. Welcome aboard, and we hope you have an amazing time with us! 🌟",
+            "Welcome to our wonderful community! We're so excited to have you here. Your journey with us begins now, and we can't wait to see what you'll bring to our server! ✨",
+            "A warm welcome to our newest member! You've just joined an amazing community filled with wonderful people. We're thrilled to have you here! 🎉",
+            "Welcome aboard! You've found your way to our special community, and we're absolutely delighted to have you here. Let's make some amazing memories together! 🌈",
+            "Hello and welcome! You've just joined a fantastic community where everyone is valued and appreciated. We're so glad you're here! 🎊",
+            "Welcome to our family! You've just become part of something truly special. We're excited to get to know you and share this amazing journey together! 💫",
+            "A heartfelt welcome to our newest member! You've joined a community that values friendship, respect, and fun. We're so happy you're here! 🌟",
+            "Welcome to our wonderful server! You've just stepped into a community filled with amazing people and great vibes. We're excited to have you here! ✨"
+        ]
+        self.current_welcome_index = 0
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logger.info("Config cog ready")
+    
+    @commands.hybrid_command(name="config", description="Set channel configurations (Admin only)")
+    @commands.has_permissions(administrator=True)
+    async def config_command(self, ctx, config_type: str, channel: discord.TextChannel):
+        """Set channel configuration"""
+        valid_types = ['welcome', 'log', 'announcement']
+        
+        if config_type.lower() not in valid_types:
+            await ctx.send(f"❌ Invalid config type. Valid types: {', '.join(valid_types)}", ephemeral=True)
             return
         
-        field_name = f"{channel_type}_channel_id"
-        success = await database.update_guild_config(
-            self.bot.guild_configs,
-            str(ctx.guild.id),
-            {field_name: str(channel.id)}
-        )
-        
-        if success:
-            await ctx.send(f"✅ Set {channel_type} channel to {channel.mention}", ephemeral=True)
-        else:
-            await ctx.send("❌ Failed to update configuration", ephemeral=True)
+        try:
+            # Update database
+            await self.bot.guild_configs.update_one(
+                {"guild_id": str(ctx.guild.id)},
+                {"$set": {f"{config_type}_channel_id": str(channel.id)}},
+                upsert=True
+            )
+            
+            await ctx.send(f"✅ {config_type.title()} channel set to {channel.mention}!", ephemeral=True)
+            logger.info(f"Config updated: {config_type} channel set to {channel.name} in {ctx.guild.name}")
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
+            logger.error(f"Error setting config: {str(e)}")
+    
+    @commands.hybrid_command(name="testwelcome", description="Test welcome message (Admin only)")
+    @commands.has_permissions(administrator=True)
+    async def test_welcome(self, ctx):
+        """Test the welcome message"""
+        try:
+            # Get guild config
+            config = await get_guild_config(self.bot.guild_configs, str(ctx.guild.id))
+            welcome_channel_id = config.get('welcome_channel_id') if config else None
+            
+            if not welcome_channel_id:
+                await ctx.send("❌ Welcome channel not configured! Set it with `/config welcome #channel`", ephemeral=True)
+                return
+            
+            welcome_channel = self.bot.get_channel(int(welcome_channel_id))
+            if not welcome_channel:
+                await ctx.send("❌ Welcome channel not found! It might have been deleted.", ephemeral=True)
+                return
+            
+            # Get rotating welcome message
+            welcome_message = self.welcome_messages[self.current_welcome_index]
+            self.current_welcome_index = (self.current_welcome_index + 1) % len(self.welcome_messages)
+            
+            # Create simple welcome embed (test version)
+            embed = discord.Embed(
+                title=f"🌟 Welcome {ctx.author.display_name}! (TEST)",
+                description="We're delighted to have you join our wonderful community! Your presence here is truly valued and we're excited to have you as part of our server family.",
+                color=discord.Color.gold(),
+                timestamp=ctx.message.created_at
+            )
+            
+            # Set thumbnail to member's avatar
+            embed.set_thumbnail(url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
+            
+            # Set footer
+            embed.set_footer(
+                text=f"Welcome to {ctx.guild.name} • We're glad you're here! ✨ (TEST)",
+                icon_url=ctx.guild.icon.url if ctx.guild.icon else None
+            )
+            
+            # Add server banner if available
+            if ctx.guild.banner:
+                embed.set_image(url=ctx.guild.banner.url)
+            
+            await welcome_channel.send(content="@everyone", embed=embed)
+            await ctx.send(f"✅ Test welcome message sent to {welcome_channel.mention}!", ephemeral=True)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
+            logger.error(f"Error testing welcome: {str(e)}")
+
+    @commands.hybrid_command(name="botintro", description="Bot introduces itself and explains its features (Admin only)")
+    @commands.has_permissions(administrator=True)
+    async def introduce_bot(self, ctx):
+        """Bot introduces itself and explains its features"""
+        try:
+            # Get guild config
+            config = await get_guild_config(self.bot.guild_configs, str(ctx.guild.id))
+            announcement_channel_id = config.get('announcement_channel_id') if config else None
+            
+            if not announcement_channel_id:
+                await ctx.send("❌ Announcement channel not configured! Set it with `/config announcement #channel`", ephemeral=True)
+                return
+            
+            announcement_channel = self.bot.get_channel(int(announcement_channel_id))
+            if not announcement_channel:
+                await ctx.send("❌ Announcement channel not found! It might have been deleted.", ephemeral=True)
+                return
+            
+            # Create beautiful bot introduction embed
+            embed = discord.Embed(
+                title="🤖 Server Manager Bot - Introduction",
+                description="**Hello everyone! I'm your Server Manager Bot, and I'm here to make your Discord server experience amazing!**",
+                color=discord.Color.blue(),
+                timestamp=ctx.message.created_at
+            )
+            
+            # Bot features section with larger font
+            embed.add_field(
+                name="🎂 **Birthday Celebrations**",
+                value="**I automatically celebrate birthdays at midnight! Set up birthdays with `/birthday @user MM-DD` and I'll send beautiful birthday announcements with custom messages.**",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="📅 **Daily Events**",
+                value="**Every morning at 8 AM, I share what's special today! From holidays to fun observances, I'll keep you informed about daily events and celebrations.**",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🌟 **Welcome Messages**",
+                value="**I warmly welcome new members to our community with beautiful, respectful welcome cards that make everyone feel valued and appreciated.**",
+                inline=False
+            )
+            
+            # Set footer
+            embed.set_footer(
+                text=f"🤖 {self.bot.user.name} • Your friendly server assistant!",
+                icon_url=self.bot.user.avatar.url if self.bot.user.avatar else self.bot.user.default_avatar.url
+            )
+            
+            await announcement_channel.send(content="@everyone", embed=embed)
+            await ctx.send(f"✅ Bot introduction sent to {announcement_channel.mention}!", ephemeral=True)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
+            logger.error(f"Error sending bot introduction: {str(e)}")
 
 async def setup(bot):
     await bot.add_cog(ConfigCog(bot))
-    logging.info("Config cog setup complete")
+    logger.info("Config cog setup complete")
