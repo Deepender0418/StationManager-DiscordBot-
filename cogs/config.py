@@ -125,36 +125,42 @@ class ConfigCog(commands.Cog):
                 await ctx.send("❌ Announcement channel not found! It might have been deleted.", ephemeral=True)
                 return
             
-            # Create beautiful bot introduction embed
+            # Create casual and friendly bot introduction
             embed = discord.Embed(
-                title="🤖 Server Manager Bot - Introduction",
-                description="**Hello everyone! I'm your Server Manager Bot, and I'm here to make your Discord server experience amazing!**",
-                color=discord.Color.blue(),
+                title="Hey everyone! 👋",
+                description="**I'm your friendly Server Manager Bot, and I'm super excited to be here with you all!**\n\nI'm here to make this server awesome and help create a great community experience. Here's what I can do for you:",
+                color=discord.Color.green(),
                 timestamp=ctx.message.created_at
             )
             
-            # Bot features section with larger font
+            # Casual features with bullet points
             embed.add_field(
-                name="🎂 **Birthday Celebrations**",
-                value="**I automatically celebrate birthdays at midnight! Set up birthdays with `/birthday @user MM-DD` and I'll send beautiful birthday announcements with custom messages.**",
+                name="🎂 Birthday Celebrations",
+                value="• I automatically celebrate birthdays at midnight!\n• Set up birthdays with `/birthday @user MM-DD`\n• I'll send beautiful birthday announcements with custom messages\n• Each person gets their own special birthday card",
                 inline=False
             )
             
             embed.add_field(
-                name="📅 **Daily Events**",
-                value="**Every morning at 8 AM, I share what's special today! From holidays to fun observances, I'll keep you informed about daily events and celebrations.**",
+                name="📅 Daily Events & Fun",
+                value="• Every morning at 8 AM, I share what's special today!\n• From holidays to fun observances, I keep you informed\n• Learn about daily events and celebrations\n• Never miss a special day again!",
                 inline=False
             )
             
             embed.add_field(
-                name="🌟 **Welcome Messages**",
-                value="**I warmly welcome new members to our community with beautiful, respectful welcome cards that make everyone feel valued and appreciated.**",
+                name="🌟 Welcome New Friends",
+                value="• I warmly welcome new members to our community\n• Beautiful, respectful welcome cards for everyone\n• Makes new members feel valued and appreciated\n• Helps create a friendly atmosphere",
                 inline=False
             )
             
-            # Set footer
+            embed.add_field(
+                name="⚙️ Easy Management",
+                value="• Simple commands to set up channels\n• Web interface for easy configuration\n• Admin commands for testing features\n• Everything designed to be user-friendly",
+                inline=False
+            )
+            
+            # Set footer with casual tone
             embed.set_footer(
-                text=f"🤖 {self.bot.user.name} • Your friendly server assistant!",
+                text=f"🤖 {self.bot.user.name} • Your friendly server assistant! Feel free to ask for help anytime!",
                 icon_url=self.bot.user.avatar.url if self.bot.user.avatar else self.bot.user.default_avatar.url
             )
             
