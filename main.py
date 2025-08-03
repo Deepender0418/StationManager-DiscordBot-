@@ -27,6 +27,7 @@ def main():
         from bot import create_bot
         from web_server import create_app, run_web_server
         from threading import Thread
+        import asyncio
         
         # Validate environment
         if not os.getenv('DISCORD_TOKEN'):
@@ -40,7 +41,7 @@ def main():
         logger.info("🚀 Starting Discord Server Manager Bot...")
         
         # Create bot instance
-        bot = create_bot()
+        bot = asyncio.run(create_bot())
         
         # Create web server
         app = create_app(bot)
