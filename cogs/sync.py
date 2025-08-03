@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+"""
+Sync cog - Command synchronization
+"""
+
 import discord
 from discord.ext import commands
 import logging
@@ -12,6 +17,7 @@ class SyncCog(commands.Cog):
     @commands.hybrid_command(name="sync", description="Sync slash commands")
     @commands.is_owner()
     async def sync_command(self, ctx):
+        """Sync slash commands globally"""
         try:
             await self.bot.tree.sync()
             await ctx.send("✅ Slash commands synced globally!")
