@@ -1,7 +1,12 @@
+#!/usr/bin/env python3
+"""
+Announce cog - Server announcements
+"""
+
 import discord
 from discord.ext import commands
 import logging
-from utils import database
+from utils.database import get_guild_config
 
 logger = logging.getLogger(__name__)
 
@@ -13,27 +18,20 @@ class AnnounceCog(commands.Cog):
     @commands.hybrid_command(name="announce", description="Send an official server announcement")
     @commands.has_permissions(administrator=True)
     async def announce(self, ctx, *, message: str):
-        """Send an announcement as the bot (Admin only)"""
+        """Send an announcement as the bot"""
         try:
-            # Get custom message config
-            config = await database.get_guild_config(
-                self.bot.guild_configs,
-                str(ctx.guild.id)
-            )
+            config = await get_guild_config(self.bot.guild_configs, str(ctx.guild.id))
             
-            # Check if announcement channel is set
             announcement_channel_id = config.get('announcement_channel_id') if config else None
             if not announcement_channel_id:
                 await ctx.send("❌ Announcement channel not configured! Set it with `/config announcement #channel`", ephemeral=True)
                 return
             
-            # Get the announcement channel
             announcement_channel = self.bot.get_channel(int(announcement_channel_id))
             if not announcement_channel:
                 await ctx.send("❌ Announcement channel not found! It might have been deleted.", ephemeral=True)
                 return
             
-            # Create embed for professional announcement
             embed = discord.Embed(
                 title="📢 Server Announcement",
                 description=message,
@@ -41,10 +39,7 @@ class AnnounceCog(commands.Cog):
             )
             embed.set_footer(text=f"Announced by {ctx.author.display_name}")
             
-            # Send the announcement
             await announcement_channel.send(embed=embed)
-            
-            # Confirm to admin
             await ctx.send(f"✅ Announcement sent to {announcement_channel.mention}!", ephemeral=True)
             
             # Log the announcement
@@ -60,6 +55,7 @@ class AnnounceCog(commands.Cog):
 
     @announce.error
     async def announce_error(self, ctx, error):
+        """Handle announce command errors"""
         if isinstance(error, commands.MissingPermissions):
             await ctx.send("⛔ You need administrator permissions to use this command!", ephemeral=True)
         elif isinstance(error, commands.MissingRequiredArgument):
