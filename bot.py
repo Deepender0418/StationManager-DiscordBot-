@@ -157,6 +157,9 @@ def create_bot():
         bot.invite_cache = {}
         bot.mongo_client = client  # Store client for cleanup
         
+        # Flag to prevent duplicate task creation
+        bot.tasks_started = False
+        
         logger.info("✅ MongoDB collections configured successfully")
         
     except Exception as e:
@@ -323,28 +326,33 @@ def create_bot():
             except Exception as e:
                 logger.error(f"❌ Error initializing config for {guild.name}: {str(e)}")
         
-        # Start background tasks
-        bot.loop.create_task(check_birthdays_at_midnight())
-        bot.loop.create_task(check_daily_events_at_8am())
-        
-        logger.info("🎂 Birthday check task started")
-        logger.info("📅 Daily events check task started (8 AM)")
-        
-        # Calculate time until next midnight
-        now = datetime.now(IST)
-        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        seconds_until_midnight = (next_midnight - now).total_seconds()
-        logger.info(f"Waiting {seconds_until_midnight:.6f} seconds until next midnight birthday check")
-        
-        # Calculate time until next 8 AM
-        next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
-        if now.hour >= 8:
+        # Start background tasks only once
+        if not bot.tasks_started:
+            bot.loop.create_task(check_birthdays_at_midnight())
+            bot.loop.create_task(check_daily_events_at_8am())
+            
+            logger.info("🎂 Birthday check task started")
+            logger.info("📅 Daily events check task started (8 AM)")
+            
+            # Calculate time until next midnight
+            now = datetime.now(IST)
+            next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            seconds_until_midnight = (next_midnight - now).total_seconds()
+            logger.info(f"Waiting {seconds_until_midnight:.6f} seconds until next midnight birthday check")
+            
+            # Calculate time until next 8 AM
             next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+            if now.hour >= 8:
+                next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+            else:
+                next_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+            
+            seconds_until_8am = (next_8am - now).total_seconds()
+            logger.info(f"Waiting {seconds_until_8am:.6f} seconds until next 8 AM events check")
+            
+            bot.tasks_started = True
         else:
-            next_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        
-        seconds_until_8am = (next_8am - now).total_seconds()
-        logger.info(f"Waiting {seconds_until_8am:.6f} seconds until next 8 AM events check")
+            logger.info("🔄 Background tasks already running, skipping duplicate creation")
 
     @bot.event
     async def on_disconnect():
