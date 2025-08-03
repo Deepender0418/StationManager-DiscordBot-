@@ -20,12 +20,24 @@ def create_app(bot):
     def run_async(coro):
         """Run async function in bot's event loop"""
         try:
-            loop = bot.loop
-            if loop.is_running():
-                future = asyncio.run_coroutine_threadsafe(coro, loop)
-                return future.result(timeout=30)
+            # Try to use bot's event loop first
+            if hasattr(bot, 'loop') and bot.loop and not bot.loop.is_closed():
+                if bot.loop.is_running():
+                    future = asyncio.run_coroutine_threadsafe(coro, bot.loop)
+                    return future.result(timeout=30)
+                else:
+                    return asyncio.run(coro)
             else:
-                return asyncio.run(coro)
+                # Create a new event loop for this thread
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    return loop.run_until_complete(coro)
+                except RuntimeError:
+                    # No event loop in current thread, create one
+                    return asyncio.run(coro)
         except Exception as e:
             logger.error(f"Async error: {str(e)}")
             return None
