@@ -112,6 +112,9 @@ class ConfigCog(commands.Cog):
     async def introduce_bot(self, ctx):
         """Bot introduces itself and explains its features"""
         try:
+            # Add debug log to track command calls
+            logger.info(f"Botintro command called by {ctx.author} in {ctx.guild}")
+            
             # Get guild config
             config = await get_guild_config(self.bot.guild_configs, str(ctx.guild.id))
             announcement_channel_id = config.get('announcement_channel_id') if config else None
@@ -166,6 +169,8 @@ class ConfigCog(commands.Cog):
             
             await announcement_channel.send(content="@everyone", embed=embed)
             await ctx.send(f"✅ Bot introduction sent to {announcement_channel.mention}!", ephemeral=True)
+            
+            logger.info(f"Botintro command completed successfully for {ctx.guild}")
             
         except Exception as e:
             await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
