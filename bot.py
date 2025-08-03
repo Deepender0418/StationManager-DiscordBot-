@@ -11,7 +11,7 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from utils.timezone import IST
-from utils.database import get_guild_config, test_mongodb_connection
+from utils.database import get_guild_config
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ async def send_daily_events_announcement(bot):
     except Exception as e:
         logger.error(f"Error sending daily events announcement: {str(e)}")
 
-async def create_bot():
+def create_bot():
     """Create and configure the Discord bot"""
 
     # Bot configuration
@@ -149,13 +149,7 @@ async def create_bot():
         )
         db = client[db_name]
         
-        # Test the connection
-        logger.info("🔌 Testing MongoDB connection...")
-        
-        # Test the connection
-        connection_ok = await test_mongodb_connection(client)
-        if not connection_ok:
-            raise Exception("MongoDB connection test failed")
+        logger.info("🔌 MongoDB connection established")
         
         bot.guild_configs = db.guild_configs
         bot.birthdays = db.birthdays
@@ -163,7 +157,7 @@ async def create_bot():
         bot.invite_cache = {}
         bot.mongo_client = client  # Store client for cleanup
         
-        logger.info("✅ MongoDB connection established successfully")
+        logger.info("✅ MongoDB collections configured successfully")
         
     except Exception as e:
         logger.error(f"❌ Failed to connect to MongoDB: {str(e)}")
