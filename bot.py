@@ -469,7 +469,9 @@ def create_bot():
             # Check if the command exists in our templates
             command = ctx.message.content.split()[0][1:].lower()  # Remove '!' and get command name
             
-            if command in bot.command_templates:
+            # Only show template if this is an incomplete command
+            existing_command = bot.get_command(command)
+            if command in bot.command_templates and not existing_command:
                 template = bot.command_templates[command]
                 
                 # Send command template info
@@ -507,12 +509,14 @@ def create_bot():
         # Process commands first
         await bot.process_commands(message)
         
-        # Check for autocomplete on command-like messages
+        # Check for autocomplete on incomplete command-like messages only
         if message.content.startswith('!') and len(message.content.split()) == 1:
             command = message.content[1:].lower()  # Remove '!' and get command name
             
-            # Check if it's a known command template
-            if command in bot.command_templates:
+            # Only show template for incomplete commands (not exact matches)
+            # Check if this is a complete command that exists
+            existing_command = bot.get_command(command)
+            if command in bot.command_templates and not existing_command:
                 template = bot.command_templates[command]
                 
                 # Send command template info
