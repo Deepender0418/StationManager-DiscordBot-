@@ -11,7 +11,7 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from utils.timezone import IST
-from utils.database import get_guild_config
+from utils.database import get_guild_config, test_mongodb_connection
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ async def send_daily_events_announcement(bot):
     except Exception as e:
         logger.error(f"Error sending daily events announcement: {str(e)}")
 
-def create_bot():
+async def create_bot():
     """Create and configure the Discord bot"""
 
     # Bot configuration
@@ -135,13 +135,40 @@ def create_bot():
     mongo_uri = os.getenv('MONGO_URI')
     db_name = os.getenv('DATABASE_NAME', 'discord_bot')
 
-    client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
-    db = client[db_name]
-
-    bot.guild_configs = db.guild_configs
-    bot.birthdays = db.birthdays
-    bot.invite_logs = db.invite_logs
-    bot.invite_cache = {}
+    # MongoDB connection with proper options for Atlas
+    try:
+        client = motor.motor_asyncio.AsyncIOMotorClient(
+            mongo_uri,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=10000,
+            socketTimeoutMS=10000,
+            maxPoolSize=10,
+            retryWrites=True,
+            retryReads=True,
+            w='majority'
+        )
+        db = client[db_name]
+        
+        # Test the connection
+        logger.info("🔌 Testing MongoDB connection...")
+        
+        # Test the connection
+        connection_ok = await test_mongodb_connection(client)
+        if not connection_ok:
+            raise Exception("MongoDB connection test failed")
+        
+        bot.guild_configs = db.guild_configs
+        bot.birthdays = db.birthdays
+        bot.invite_logs = db.invite_logs
+        bot.invite_cache = {}
+        bot.mongo_client = client  # Store client for cleanup
+        
+        logger.info("✅ MongoDB connection established successfully")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to MongoDB: {str(e)}")
+        logger.error("Please check your MONGO_URI and MongoDB Atlas configuration")
+        raise
 
     # Command templates for autocomplete
     bot.command_templates = {
@@ -269,46 +296,74 @@ def create_bot():
 
     @bot.event
     async def on_ready():
-        """Called when bot is ready"""
-        logger.info(f'🤖 Logged in as {bot.user} (ID: {bot.user.id})')
-        logger.info(f'📊 Connected to {len(bot.guilds)} guilds')
-
+        """Called when the bot is ready"""
+        logger.info(f"🤖 Bot is ready! Logged in as {bot.user}")
+        logger.info(f"📊 Connected to {len(bot.guilds)} guilds")
+        
         # Load cogs
         await load_cogs(bot)
-
-        # Initialize invite cache
+        
+        # Cache invites for all guilds
         for guild in bot.guilds:
             try:
                 invites = await guild.invites()
-                bot.invite_cache[guild.id] = {invite.code: invite for invite in invites}
-                logger.info(f'📋 Cached {len(invites)} invites for {guild.name}')
-            except discord.Forbidden:
-                logger.warning(f'⚠️ No permission to fetch invites in {guild.name}')
+                bot.invite_cache[guild.id] = invites
+                logger.info(f"📋 Cached {len(invites)} invites for {guild.name}")
             except Exception as e:
-                logger.error(f'❌ Error caching invites for {guild.name}: {str(e)}')
-
+                logger.warning(f"Could not cache invites for {guild.name}: {str(e)}")
+        
         # Initialize guild configs
         for guild in bot.guilds:
             try:
-                await bot.guild_configs.find_one_and_update(
-                    {"guild_id": str(guild.id)},
-                    {"$setOnInsert": {
+                config = await get_guild_config(bot.guild_configs, str(guild.id))
+                if not config:
+                    # Create default config
+                    await bot.guild_configs.insert_one({
                         "guild_id": str(guild.id),
+                        "guild_name": guild.name,
                         "welcome_channel_id": None,
-                        "log_channel_id": None,
-                        "announcement_channel_id": None
-                    }},
-                    upsert=True
-                )
-                logger.info(f'⚙️ Initialized config for {guild.name}')
+                        "announcement_channel_id": None,
+                        "birthday_message": "🎉 **Happy Birthday {USER_MENTION}!** 🎉\nHope you have an amazing day!"
+                    })
+                    logger.info(f"✅ Initialized config for {guild.name}")
             except Exception as e:
-                logger.error(f'❌ Error initializing config for {guild.name}: {str(e)}')
-
+                logger.error(f"❌ Error initializing config for {guild.name}: {str(e)}")
+        
         # Start background tasks
         bot.loop.create_task(check_birthdays_at_midnight())
         bot.loop.create_task(check_daily_events_at_8am())
-        logger.info('🎂 Birthday check task started')
-        logger.info('📅 Daily events check task started (8 AM)')
+        
+        logger.info("🎂 Birthday check task started")
+        logger.info("📅 Daily events check task started (8 AM)")
+        
+        # Calculate time until next midnight
+        now = datetime.now(IST)
+        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        seconds_until_midnight = (next_midnight - now).total_seconds()
+        logger.info(f"Waiting {seconds_until_midnight:.6f} seconds until next midnight birthday check")
+        
+        # Calculate time until next 8 AM
+        next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+        if now.hour >= 8:
+            next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+        else:
+            next_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        
+        seconds_until_8am = (next_8am - now).total_seconds()
+        logger.info(f"Waiting {seconds_until_8am:.6f} seconds until next 8 AM events check")
+
+    @bot.event
+    async def on_disconnect():
+        """Called when the bot disconnects"""
+        logger.warning("🔌 Bot disconnected from Discord")
+        
+        # Close MongoDB connection
+        if hasattr(bot, 'mongo_client'):
+            try:
+                bot.mongo_client.close()
+                logger.info("🔌 MongoDB connection closed")
+            except Exception as e:
+                logger.error(f"Error closing MongoDB connection: {str(e)}")
 
     @bot.event
     async def on_member_join(member):
