@@ -1,12 +1,17 @@
-from datetime import datetime, timezone, timedelta
+#!/usr/bin/env python3
+"""
+Timezone utilities for Discord bot
+"""
 
-# Example for IST (India Standard Time)
-class IST(datetime.tzinfo):
-    def utcoffset(self, dt):
-        return timedelta(hours=5, minutes=30)
+from datetime import datetime, timedelta, timezone
 
-    def dst(self, dt):
-        return timedelta(0)
+# Simple IST timezone (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
-    def tzname(self, dt):
-        return "IST"
+def get_current_time():
+    """Get current time in IST"""
+    return datetime.now(IST)
+
+def format_time(dt):
+    """Format datetime for display"""
+    return dt.strftime("%Y-%m-%d %H:%M:%S IST")
