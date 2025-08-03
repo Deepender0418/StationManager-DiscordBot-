@@ -5,85 +5,211 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
-        body { background-color: #f8f9fa; padding: 20px; }
-        .card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .birthday-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        body { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .card { 
+            margin-bottom: 25px; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: none;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        .card-header {
+            border-radius: 15px 15px 0 0 !important;
+            border: none;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+        .birthday-item { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 15px; 
+            border-bottom: 1px solid #eee; 
+            transition: all 0.3s ease;
+        }
+        .birthday-item:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-2px);
+        }
         .birthday-item:last-child { border-bottom: none; }
-        .btn-action { margin-left: 5px; }
-        .custom-message { background-color: #e9f7fe; border-left: 4px solid #1e88e5; }
+        .btn-action { 
+            margin-left: 8px; 
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .btn-action:hover {
+            transform: scale(1.05);
+        }
+        .custom-message { 
+            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+            border-left: 4px solid #2196f3;
+            border-radius: 10px;
+        }
         .custom-message-badge {
-            background-color: #6f42c1;
+            background: linear-gradient(135deg, #9c27b0, #673ab7);
             font-size: 0.8em;
             margin-left: 8px;
+            border-radius: 12px;
+            padding: 4px 8px;
         }
         .custom-message-text {
             font-style: italic;
             color: #6c757d;
-            margin-top: 5px;
+            margin-top: 8px;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 3px solid #9c27b0;
+        }
+        .page-header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .btn {
+            border-radius: 10px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .modal-content {
+            border-radius: 15px;
+            border: none;
+        }
+        .modal-header {
+            border-radius: 15px 15px 0 0;
+        }
+        .alert {
+            border-radius: 10px;
+            border: none;
+        }
+        .list-group-item {
+            border-radius: 10px;
+            margin-bottom: 5px;
+            border: 1px solid #e9ecef;
+        }
+        .member-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .member-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .birthday-date {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>Birthday Management: {{ guild_name }}</h1>
-            <a href="/config/{{ guild_id }}" class="btn btn-secondary">
-                <i class="bi bi-gear"></i> Server Configuration
-            </a>
+        <div class="page-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-0">
+                        <i class="bi bi-balloon-heart text-primary"></i>
+                        Birthday Management: {{ guild_name }}
+                    </h1>
+                    <p class="text-muted mb-0">Manage birthdays and custom messages for your server</p>
+                </div>
+                <a href="/config/{{ guild_id }}" class="btn btn-outline-primary">
+                    <i class="bi bi-gear"></i> Server Configuration
+                </a>
+            </div>
         </div>
         
         <div class="card">
             <div class="card-header bg-primary text-white">
-                <i class="bi bi-balloon"></i> Custom Birthday Message
+                <i class="bi bi-chat-quote"></i> Custom Birthday Message Template
             </div>
             <div class="card-body custom-message">
                 <div class="mb-3">
-                    <label class="form-label">Birthday Announcement Template:</label>
-                    <textarea class="form-control" id="birthdayMessage" rows="3" 
+                    <label class="form-label fw-bold">Default Birthday Announcement Template:</label>
+                    <textarea class="form-control" id="birthdayMessage" rows="4" 
                         placeholder="🎉 Happy Birthday {USER_MENTION}! 🥳">{% if config.birthday_message %}{{ config.birthday_message }}{% endif %}</textarea>
-                    <div class="form-text">
-                        Use <code>{USER_MENTION}</code> to mention the user, <code>{USER_NAME}</code> for their name
+                    <div class="form-text mt-2">
+                        <i class="bi bi-info-circle"></i>
+                        Use <code>{USER_MENTION}</code> to mention the user, <code>{USER_NAME}</code> for their display name
                     </div>
                 </div>
                 <button class="btn btn-success" id="saveMessageBtn">
-                    <i class="bi bi-save"></i> Save Message
+                    <i class="bi bi-save"></i> Save Template
                 </button>
             </div>
         </div>
         
         <div class="card">
-        <div class="card-header bg-success text-white">
-            <i class="bi bi-plus-circle"></i> Add New Birthday
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-5">
-                    <label class="form-label">Select Member</label>
-                    <select class="form-select" id="memberSelect">
-                        <option value="">Choose a member</option>
-                        {% for member in members %}
-                        <option value="{{ member.id }}">{{ member.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Birthday (MM-DD)</label>
-                    <input type="text" class="form-control" id="birthdayDate" 
-                        placeholder="e.g., 05-15">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Custom Message (Optional)</label>
-                    <input type="text" class="form-control" id="customMessage" 
-                        placeholder="Personalized message">
-                </div>
-                <div class="col-12">
-                    <button class="btn btn-primary w-100" id="addBirthdayBtn">
-                        <i class="bi bi-plus-lg"></i> Add Birthday
-                    </button>
+            <div class="card-header bg-success text-white">
+                <i class="bi bi-plus-circle"></i> Add New Birthday
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Select Member</label>
+                        <select class="form-select" id="memberSelect">
+                            <option value="">Choose a member</option>
+                            {% for member in members %}
+                            <option value="{{ member.id }}">{{ member.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Birthday (MM-DD)</label>
+                        <input type="text" class="form-control" id="birthdayDate" 
+                            placeholder="e.g., 05-15">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Custom Message (Optional)</label>
+                        <textarea class="form-control" id="customMessage" rows="3"
+                            placeholder="🎉 Happy Birthday {USER_MENTION}! 🥳&#10;Hope you have an amazing day, {USER_NAME}!&#10;&#10;Use {USER_MENTION} to mention the user&#10;Use {USER_NAME} for their display name"></textarea>
+                        <div class="form-text">
+                            <i class="bi bi-info-circle"></i> Use <code>{USER_MENTION}</code> to mention the user, <code>{USER_NAME}</code> for their display name. Leave blank to use the default template above.
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-primary w-100" id="addBirthdayBtn">
+                            <i class="bi bi-plus-lg"></i> Add Birthday
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
         
         <div class="card">
             <div class="card-header bg-info text-white">
@@ -94,29 +220,42 @@
                 <div class="list-group">
                     {% for bday in birthdays %}
                     <div class="birthday-item">
-                        <div>
-                            <strong>
+                        <div class="member-info">
+                            <div class="member-avatar">
                                 {% for member in members %}
                                     {% if member.id == bday.user_id|string %}
-                                        {{ member.name }}
-                                        {% if bday.custom_message %}
-                                            <span class="badge custom-message-badge">Custom Msg</span>
-                                        {% endif %}
+                                        {{ member.name[:2].upper() }}
                                     {% endif %}
                                 {% endfor %}
-                            </strong>
-                            <div class="text-muted">Birthday: {{ bday.birthday }}</div>
-                            {% if bday.custom_message %}
-                            <div class="custom-message-text">
-                                <i class="bi bi-chat-quote"></i> {{ bday.custom_message }}
                             </div>
-                            {% endif %}
+                            <div>
+                                <strong>
+                                    {% for member in members %}
+                                        {% if member.id == bday.user_id|string %}
+                                            {{ member.name }}
+                                            {% if bday.custom_message %}
+                                                <span class="badge custom-message-badge">Custom Msg</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                </strong>
+                                <div class="mt-1">
+                                    <span class="birthday-date">
+                                        <i class="bi bi-calendar-event"></i> {{ bday.birthday }}
+                                    </span>
+                                </div>
+                                {% if bday.custom_message %}
+                                <div class="custom-message-text">
+                                    <i class="bi bi-chat-quote"></i> {{ bday.custom_message }}
+                                </div>
+                                {% endif %}
+                            </div>
                         </div>
                         <div>
                             <button class="btn btn-sm btn-warning btn-edit" 
                                 data-user-id="{{ bday.user_id }}" 
                                 data-birthday="{{ bday.birthday }}"
-                                data-custom-message="{{ bday.custom_message }}">  <!-- New attribute -->
+                                data-custom-message="{{ bday.custom_message or '' }}">
                                 <i class="bi bi-pencil"></i> Edit
                             </button>
                             <button class="btn btn-sm btn-danger btn-delete" 
@@ -128,8 +267,10 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="alert alert-info">
-                    No birthdays have been set yet. Add one using the form above.
+                <div class="alert alert-info text-center">
+                    <i class="bi bi-info-circle fs-1"></i>
+                    <h5>No birthdays set yet</h5>
+                    <p>Add birthdays using the form above to get started!</p>
                 </div>
                 {% endif %}
             </div>
@@ -141,31 +282,35 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-warning text-white">
-                    <h5 class="modal-title">Edit Birthday</h5>
+                    <h5 class="modal-title">
+                        <i class="bi bi-pencil-square"></i> Edit Birthday
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Member</label>
+                        <label class="form-label fw-bold">Member</label>
                         <input type="text" class="form-control" id="editMember" disabled>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Birthday (MM-DD)</label>
+                        <label class="form-label fw-bold">Birthday (MM-DD)</label>
                         <input type="text" class="form-control" id="editBirthday">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Custom Message</label>
-                        <textarea class="form-control" id="editCustomMessage" 
-                            placeholder="Personalized message for this user"></textarea>
+                        <label class="form-label fw-bold">Custom Message</label>
+                        <textarea class="form-control" id="editCustomMessage" rows="4"
+                            placeholder="🎉 Happy Birthday {USER_MENTION}! 🥳&#10;Hope you have an amazing day, {USER_NAME}!&#10;&#10;Use {USER_MENTION} to mention the user&#10;Use {USER_NAME} for their display name"></textarea>
                         <div class="form-text">
-                            Leave blank to use server default
+                            <i class="bi bi-info-circle"></i> Use <code>{USER_MENTION}</code> to mention the user, <code>{USER_NAME}</code> for their display name. Leave blank to use server default template.
                         </div>
                     </div>
                     <input type="hidden" id="editUserId">
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveEditBtn">Save Changes</button>
+                    <button type="button" class="btn btn-primary" id="saveEditBtn">
+                        <i class="bi bi-save"></i> Save Changes
+                    </button>
                 </div>
             </div>
         </div>
@@ -204,7 +349,7 @@
         function addBirthday() {
             const userId = memberSelect.value;
             const date = birthdayDate.value.trim();
-            const customMessage = document.getElementById('customMessage').value.trim(); // New
+            const customMessage = document.getElementById('customMessage').value.trim();
             
             if (!userId || !date) {
                 alert('Please select a member and enter a date');
@@ -223,18 +368,19 @@
                     guild_id: guildId,
                     user_id: userId,
                     date: date,
-                    custom_message: customMessage || null  // New field
+                    custom_message: customMessage || null
                 })
             })
             .then(response => {
-            if (!response.ok) {
-                return response.text().then(text => { throw new Error(text) });
-            }
-            return response.json();
+                if (!response.ok) {
+                    return response.text().then(text => { throw new Error(text) });
+                }
+                return response.json();
             })
             .then(data => {
                 if (data.success) {
-                    // ...
+                    alert('Birthday added successfully!');
+                    location.reload();
                 } else {
                     alert(`Error: ${data.error}`);
                 }
@@ -264,7 +410,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert('Custom message saved successfully!');
+                    alert('Custom message template saved successfully!');
                 } else {
                     alert(`Error: ${data.error}`);
                 }
@@ -278,13 +424,13 @@
         function openEditModal(event) {
             const userId = event.target.dataset.userId;
             const birthday = event.target.dataset.birthday;
-            const customMessage = event.target.dataset.customMessage || '';  // New
+            const customMessage = event.target.dataset.customMessage || '';
             const memberName = event.target.closest('.birthday-item')
-                .querySelector('strong').textContent;
+                .querySelector('strong').textContent.trim();
             
             document.getElementById('editMember').value = memberName;
             document.getElementById('editBirthday').value = birthday;
-            document.getElementById('editCustomMessage').value = customMessage;  // New
+            document.getElementById('editCustomMessage').value = customMessage;
             document.getElementById('editUserId').value = userId;
             
             // Show the modal
@@ -295,7 +441,7 @@
         function saveBirthdayEdit() {
             const userId = document.getElementById('editUserId').value;
             const newDate = document.getElementById('editBirthday').value.trim();
-            const customMessage = document.getElementById('editCustomMessage').value.trim();  // New
+            const customMessage = document.getElementById('editCustomMessage').value.trim();
             
             if (!isValidDate(newDate)) {
                 alert('Invalid date format. Please use MM-DD format (e.g., 05-15)');
@@ -309,7 +455,7 @@
                     guild_id: guildId,
                     user_id: userId,
                     date: newDate,
-                    custom_message: customMessage || null  // New field
+                    custom_message: customMessage || null
                 })
             })
             .then(response => response.json())
