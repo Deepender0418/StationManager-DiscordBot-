@@ -4,8 +4,20 @@ Database utilities for Discord bot
 """
 
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
+
+async def test_mongodb_connection(client):
+    """Test MongoDB connection"""
+    try:
+        # Ping the database
+        await client.admin.command('ping')
+        logger.info("✅ MongoDB connection test successful")
+        return True
+    except Exception as e:
+        logger.error(f"❌ MongoDB connection test failed: {str(e)}")
+        return False
 
 async def get_guild_config(collection, guild_id: str):
     """Get guild configuration"""
