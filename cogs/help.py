@@ -82,6 +82,32 @@ class HelpCog(commands.Cog):
     @commands.hybrid_command(name="help", description="Show command information")
     async def help_command(self, ctx, command_name: str = None):
         """Show help for commands"""
+        # Check for common typos and provide helpful suggestions
+        if command_name and command_name.lower() == "introbot":
+            embed = discord.Embed(
+                title="🤖 Command Not Found",
+                description="It looks like you might be looking for the **bot introduction** command!",
+                color=discord.Color.blue()
+            )
+            embed.add_field(
+                name="💡 Did you mean?",
+                value="`!botintro` - Bot introduces itself and explains its features",
+                inline=False
+            )
+            embed.add_field(
+                name="📋 Usage",
+                value="`!botintro` (Admin only)",
+                inline=False
+            )
+            embed.add_field(
+                name="💭 What it does",
+                value="Sends a beautiful introduction message to your announcement channel explaining all the bot's features!",
+                inline=False
+            )
+            embed.set_footer(text="💡 Common mistake: 'introbot' → 'botintro'")
+            await ctx.send(embed=embed)
+            return
+        
         command_templates = {
             "config": {
                 "description": "Set channel configurations",
@@ -148,6 +174,16 @@ class HelpCog(commands.Cog):
                 "description": "Show all command templates",
                 "usage": "!templates",
                 "examples": ["!templates"]
+            },
+            "invites": {
+                "description": "View invite statistics (Admin only)",
+                "usage": "!invites",
+                "examples": ["!invites"]
+            },
+            "invitestats": {
+                "description": "View detailed invite statistics (Admin only)",
+                "usage": "!invitestats",
+                "examples": ["!invitestats"]
             }
         }
 
