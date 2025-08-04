@@ -67,8 +67,17 @@ def create_app(bot):
             return redirect(url_for('guild_config', guild_id=guild_id))
         
         config = run_async(get_guild_config(bot.guild_configs, guild_id))
-        guild = bot.get_guild(int(guild_id)) if bot.is_ready() else None
-        channels = [{"id": str(c.id), "name": c.name} for c in guild.text_channels] if guild else []
+        guild = None
+        channels = []
+        
+        # Check if bot is ready and get guild info
+        if hasattr(bot, 'is_ready') and bot.is_ready():
+            try:
+                guild = bot.get_guild(int(guild_id))
+                if guild:
+                    channels = [{"id": str(c.id), "name": c.name} for c in guild.text_channels]
+            except (ValueError, AttributeError) as e:
+                logger.error(f"Error getting guild info: {str(e)}")
         
         return render_template('config.html', 
                              guild_id=guild_id,
@@ -81,8 +90,17 @@ def create_app(bot):
         """Birthday management page"""
         try:
             config = run_async(get_guild_config(bot.guild_configs, str(guild_id)))
-            guild = bot.get_guild(int(guild_id)) if bot.is_ready() else None
-            members = [{"id": str(m.id), "name": m.display_name} for m in guild.members] if guild else []
+            guild = None
+            members = []
+            
+            # Check if bot is ready and get guild info
+            if hasattr(bot, 'is_ready') and bot.is_ready():
+                try:
+                    guild = bot.get_guild(int(guild_id))
+                    if guild:
+                        members = [{"id": str(m.id), "name": m.display_name} for m in guild.members]
+                except (ValueError, AttributeError) as e:
+                    logger.error(f"Error getting guild info: {str(e)}")
             
             # Get birthdays
             async def fetch_birthdays():
