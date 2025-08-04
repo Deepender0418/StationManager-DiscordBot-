@@ -7,6 +7,8 @@ import discord
 from discord.ext import commands
 import logging
 from utils.database import get_guild_config
+from utils.timezone import IST
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -168,11 +170,11 @@ class ConfigCog(commands.Cog):
                 inline=False
             )
             
-            # embed.add_field(
-            #     name="⚙️ **Easy Management**",
-            #     value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🛠️ **Simple commands** to set up channels\n• 🌐 **Web interface** for easy configuration\n• 🧪 **Admin commands** for testing features\n• 🎯 **Everything designed** to be user-friendly\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            #     inline=False
-            # )
+            embed.add_field(
+                name="⚙️ **Easy Management**",
+                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🛠️ **Simple commands** to set up channels\n• 🌐 **Web interface** for easy configuration\n• 🧪 **Admin commands** for testing features\n• 🎯 **Everything designed** to be user-friendly\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                inline=False
+            )
             
             # Add a closing quote
             embed.add_field(
@@ -196,7 +198,115 @@ class ConfigCog(commands.Cog):
             await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
             logger.error(f"Error sending bot introduction: {str(e)}")
 
+    @commands.hybrid_command(name="invites", description="View invite statistics (Admin only)")
+    @commands.has_permissions(administrator=True)
+    async def view_invites(self, ctx):
+        """View invite statistics for the server"""
+        try:
+            guild = ctx.guild
+            
+            # Get current invites
+            invites = await guild.invites()
+            
+            if not invites:
+                await ctx.send("📋 No active invites found for this server.", ephemeral=True)
+                return
+            
+            # Create embed with invite statistics
+            embed = discord.Embed(
+                title="🎫 Server Invites",
+                description=f"Active invites for **{guild.name}**",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(IST)
+            )
+            
+            # Sort invites by uses (most used first)
+            sorted_invites = sorted(invites, key=lambda x: x.uses, reverse=True)
+            
+            for i, invite in enumerate(sorted_invites[:10]):  # Show top 10 invites
+                inviter_name = invite.inviter.display_name if invite.inviter else "Unknown"
+                max_uses = invite.max_uses if invite.max_uses else "∞"
+                uses_text = f"{invite.uses}/{max_uses}"
+                
+                embed.add_field(
+                    name=f"#{i+1} {inviter_name}",
+                    value=f"**Code:** `{invite.code}`\n**Uses:** {uses_text}\n**Created:** <t:{int(invite.created_at.timestamp())}:R>",
+                    inline=True
+                )
+            
+            if len(sorted_invites) > 10:
+                embed.set_footer(text=f"Showing top 10 of {len(sorted_invites)} invites")
+            else:
+                embed.set_footer(text=f"Total: {len(sorted_invites)} invites")
+            
+            await ctx.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
+            logger.error(f"Error viewing invites: {str(e)}")
+
+    @commands.hybrid_command(name="invitestats", description="View detailed invite statistics (Admin only)")
+    @commands.has_permissions(administrator=True)
+    async def invite_stats(self, ctx):
+        """View detailed invite statistics"""
+        try:
+            guild = ctx.guild
+            
+            # Get current invites
+            invites = await guild.invites()
+            
+            if not invites:
+                await ctx.send("📋 No active invites found for this server.", ephemeral=True)
+                return
+            
+            # Calculate statistics
+            total_uses = sum(invite.uses for invite in invites)
+            total_invites = len(invites)
+            
+            # Group by inviter
+            inviter_stats = {}
+            for invite in invites:
+                inviter_name = invite.inviter.display_name if invite.inviter else "Unknown"
+                if inviter_name not in inviter_stats:
+                    inviter_stats[inviter_name] = {"invites": 0, "uses": 0}
+                inviter_stats[inviter_name]["invites"] += 1
+                inviter_stats[inviter_name]["uses"] += invite.uses
+            
+            # Sort by total uses
+            sorted_inviters = sorted(inviter_stats.items(), key=lambda x: x[1]["uses"], reverse=True)
+            
+            embed = discord.Embed(
+                title="📊 Invite Statistics",
+                description=f"Detailed invite statistics for **{guild.name}**",
+                color=discord.Color.green(),
+                timestamp=datetime.now(IST)
+            )
+            
+            embed.add_field(
+                name="📈 Overall Stats",
+                value=f"**Total Invites:** {total_invites}\n**Total Uses:** {total_uses}\n**Active Inviters:** {len(inviter_stats)}",
+                inline=False
+            )
+            
+            # Show top inviters
+            for i, (inviter_name, stats) in enumerate(sorted_inviters[:5]):
+                embed.add_field(
+                    name=f"#{i+1} {inviter_name}",
+                    value=f"**Invites:** {stats['invites']}\n**Total Uses:** {stats['uses']}\n**Avg Uses/Invite:** {stats['uses']/stats['invites']:.1f}",
+                    inline=True
+                )
+            
+            if len(sorted_inviters) > 5:
+                embed.set_footer(text=f"Showing top 5 of {len(sorted_inviters)} inviters")
+            else:
+                embed.set_footer(text=f"Total: {len(sorted_inviters)} inviters")
+            
+            await ctx.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
+            logger.error(f"Error viewing invite stats: {str(e)}")
+
 async def setup(bot):
     await bot.add_cog(ConfigCog(bot))
     logger.info("Config cog setup complete")
-
