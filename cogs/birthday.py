@@ -42,7 +42,7 @@ class BirthdayCog(commands.Cog):
                     month, day = map(int, date.split('-'))
                     datetime.now(IST).replace(year=2020, month=month, day=day)
                     birthday = f"{month:02d}-{day:02d}"
-                except ValueError:
+                except (ValueError, AttributeError):
                     await ctx.send("❌ Invalid date format. Use MM-DD (e.g., 12-31)", ephemeral=True)
                     return
                 
@@ -74,7 +74,7 @@ class BirthdayCog(commands.Cog):
                     month, day = map(int, date.split('-'))
                     datetime.now(IST).replace(year=2020, month=month, day=day)
                     birthday = f"{month:02d}-{day:02d}"
-                except ValueError:
+                except (ValueError, AttributeError):
                     await ctx.send("❌ Invalid date format. Use MM-DD (e.g., 12-31)", ephemeral=True)
                     return
                 
@@ -94,8 +94,13 @@ class BirthdayCog(commands.Cog):
                 await ctx.send(f"🎂 Your birthday has been set to {date}! You'll receive birthday announcements on this date.", ephemeral=True)
                 
         except Exception as e:
-            await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
-            logger.error(f"Error setting birthday: {str(e)}")
+            error_msg = str(e)
+            if "Cannot use MongoClient after close" in error_msg:
+                await ctx.send("❌ Database connection temporarily unavailable. Please try again in a moment.", ephemeral=True)
+                logger.error(f"MongoDB connection closed while setting birthday. This may be due to a temporary disconnect.")
+            else:
+                await ctx.send(f"❌ Error: {error_msg}", ephemeral=True)
+                logger.error(f"Error setting birthday: {error_msg}")
     
     @commands.hybrid_command(name="deletebirthday", description="Delete a user's birthday")
     @commands.has_permissions(administrator=True)
@@ -148,8 +153,13 @@ class BirthdayCog(commands.Cog):
             await ctx.send(embed=embed, ephemeral=True)
             
         except Exception as e:
-            await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
-            logger.error(f"Error listing birthdays: {str(e)}")
+            error_msg = str(e)
+            if "Cannot use MongoClient after close" in error_msg:
+                await ctx.send("❌ Database connection temporarily unavailable. Please try again in a moment.", ephemeral=True)
+                logger.error(f"MongoDB connection closed while listing birthdays for guild {ctx.guild.id}. This may be due to a temporary disconnect.")
+            else:
+                await ctx.send(f"❌ Error: {error_msg}", ephemeral=True)
+                logger.error(f"Error listing birthdays: {error_msg}")
 
     @commands.hybrid_command(name="testbirthday", description="Test birthday announcement (Admin only)")
     @commands.has_permissions(administrator=True)
@@ -200,8 +210,13 @@ class BirthdayCog(commands.Cog):
             await ctx.send(f"✅ Test birthday announcement sent to {announcement_channel.mention}!", ephemeral=True)
             
         except Exception as e:
-            await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)
-            logger.error(f"Error testing birthday: {str(e)}")
+            error_msg = str(e)
+            if "Cannot use MongoClient after close" in error_msg:
+                await ctx.send("❌ Database connection temporarily unavailable. Please try again in a moment.", ephemeral=True)
+                logger.error(f"MongoDB connection closed while testing birthday. This may be due to a temporary disconnect.")
+            else:
+                await ctx.send(f"❌ Error: {error_msg}", ephemeral=True)
+                logger.error(f"Error testing birthday: {error_msg}")
 
     @commands.hybrid_command(name="testautobirthday", description="Test automatic birthday check (Admin only)")
     @commands.has_permissions(administrator=True)
