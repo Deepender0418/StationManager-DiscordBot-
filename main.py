@@ -57,8 +57,11 @@ def main():
         
     except KeyboardInterrupt:
         logger.info("👋 Bot stopped by user")
+    except SystemExit:
+        logger.info("🔄 Bot shutting down")
     except Exception as e:
         logger.error(f"❌ Fatal error: {str(e)}", exc_info=True)
+        raise
 
 if __name__ == '__main__':
     main()
