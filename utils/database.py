@@ -12,7 +12,11 @@ async def get_guild_config(collection, guild_id: str):
     try:
         return await collection.find_one({"guild_id": guild_id})
     except Exception as e:
-        logger.error(f"Error getting guild config for {guild_id}: {str(e)}")
+        error_msg = str(e)
+        if "Cannot use MongoClient after close" in error_msg:
+            logger.error(f"MongoDB connection closed while getting guild config for {guild_id}. This may be due to a temporary disconnect.")
+        else:
+            logger.error(f"Error getting guild config for {guild_id}: {error_msg}")
         return None
 
 async def update_guild_config(collection, guild_id: str, updates: dict) -> bool:
@@ -32,5 +36,9 @@ async def update_guild_config(collection, guild_id: str, updates: dict) -> bool:
         
         return result.acknowledged
     except Exception as e:
-        logger.error(f"Error updating guild config for {guild_id}: {str(e)}")
+        error_msg = str(e)
+        if "Cannot use MongoClient after close" in error_msg:
+            logger.error(f"MongoDB connection closed while updating guild config for {guild_id}. This may be due to a temporary disconnect.")
+        else:
+            logger.error(f"Error updating guild config for {guild_id}: {error_msg}")
         return False
