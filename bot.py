@@ -37,13 +37,17 @@ async def send_birthday_announcements(bot):
         guild_birthdays = {}
         for birthday_doc in birthdays:
             guild_id = birthday_doc.get('guild_id')
-            if guild_id not in guild_birthdays:
-                guild_birthdays[guild_id] = []
-            guild_birthdays[guild_id].append(birthday_doc)
+            # Convert to string for consistent comparison
+            guild_id_str = str(guild_id)
+            if guild_id_str not in guild_birthdays:
+                guild_birthdays[guild_id_str] = []
+            guild_birthdays[guild_id_str].append(birthday_doc)
         
         # Send announcements for each guild
-        for guild_id, guild_birthday_list in guild_birthdays.items():
+        for guild_id_str, guild_birthday_list in guild_birthdays.items():
             try:
+                # Convert back to int for get_guild
+                guild_id = int(guild_id_str)
                 guild = bot.get_guild(guild_id)
                 if not guild:
                     continue
@@ -228,6 +232,18 @@ def create_bot():
             "usage": "!show <command>",
             "examples": ["!show birthday", "!show config"],
             "bot_info": "📋 Template Manager Bot"
+        },
+        "invites": {
+            "description": "View invite statistics (Admin only)",
+            "usage": "!invites",
+            "examples": ["!invites"],
+            "bot_info": "🎫 Invite Tracker Bot"
+        },
+        "invitestats": {
+            "description": "View detailed invite statistics (Admin only)",
+            "usage": "!invitestats",
+            "examples": ["!invitestats"],
+            "bot_info": "📊 Invite Statistics Bot"
         }
     }
 
@@ -248,6 +264,9 @@ def create_bot():
                 # Check for birthdays
                 await send_birthday_announcements(bot)
                 
+            except asyncio.CancelledError:
+                logger.info("Birthday check task cancelled")
+                break
             except Exception as e:
                 logger.error(f"Error in midnight birthday check: {str(e)}")
                 await asyncio.sleep(3600)  # Wait 1 hour if error occurs
@@ -274,6 +293,9 @@ def create_bot():
                 # Send daily events announcement
                 await send_daily_events_announcement(bot)
                 
+            except asyncio.CancelledError:
+                logger.info("Daily events check task cancelled")
+                break
             except Exception as e:
                 logger.error(f"Error in 8 AM events check: {str(e)}")
                 await asyncio.sleep(3600)  # Wait 1 hour if error occurs
@@ -359,8 +381,63 @@ def create_bot():
         """Called when the bot disconnects"""
         logger.warning("🔌 Bot disconnected from Discord")
         
-        # Close MongoDB connection
-        if hasattr(bot, 'mongo_client'):
+        # Don't close MongoDB connection on disconnect - only on shutdown
+        # The connection will be reused when the bot reconnects
+        logger.info("🔄 Keeping MongoDB connection alive for reconnection")
+
+    @bot.event
+    async def on_resumed():
+        """Called when the bot resumes connection"""
+        logger.info("🔄 Bot resumed connection to Discord")
+        
+        # Verify MongoDB connection is still alive
+        try:
+            if hasattr(bot, 'mongo_client') and bot.mongo_client:
+                await bot.mongo_client.admin.command('ping')
+                logger.info("✅ MongoDB connection verified after resume")
+            else:
+                logger.warning("⚠️ MongoDB client not available, attempting reconnection")
+                raise Exception("MongoDB client not available")
+        except Exception as e:
+            logger.error(f"❌ MongoDB connection lost during disconnect: {str(e)}")
+            # Reconnect to MongoDB
+            try:
+                mongo_uri = os.getenv('MONGO_URI')
+                db_name = os.getenv('DATABASE_NAME', 'discord_bot')
+                
+                # Close old client if it exists
+                if hasattr(bot, 'mongo_client') and bot.mongo_client:
+                    bot.mongo_client.close()
+                
+                # Create new client
+                client = motor.motor_asyncio.AsyncIOMotorClient(
+                    mongo_uri,
+                    serverSelectionTimeoutMS=5000,
+                    connectTimeoutMS=10000,
+                    socketTimeoutMS=10000,
+                    maxPoolSize=10,
+                    retryWrites=True,
+                    retryReads=True,
+                    w='majority'
+                )
+                db = client[db_name]
+                
+                bot.guild_configs = db.guild_configs
+                bot.birthdays = db.birthdays
+                bot.invite_logs = db.invite_logs
+                bot.mongo_client = client
+                
+                logger.info("✅ MongoDB connection re-established")
+            except Exception as reconnect_error:
+                logger.error(f"❌ Failed to reconnect to MongoDB: {str(reconnect_error)}")
+
+    @bot.event
+    async def on_close():
+        """Called when the bot is shutting down"""
+        logger.info("🔄 Bot is shutting down...")
+        
+        # Close MongoDB connection only on actual shutdown
+        if hasattr(bot, 'mongo_client') and bot.mongo_client:
             try:
                 bot.mongo_client.close()
                 logger.info("🔌 MongoDB connection closed")
@@ -369,87 +446,78 @@ def create_bot():
 
     @bot.event
     async def on_member_join(member):
-        """Handle member join with beautiful welcome message"""
+        """Log join as a single line: @UserX joined (invited by @UserY) or (inviter unknown)"""
         try:
             guild = member.guild
+            invite_used = None
+            inviter = None
             
-            # Get guild config
+            # Check invites to find who invited the user
+            try:
+                current_invites = await guild.invites()
+                if guild.id in bot.invite_cache:
+                    for invite in current_invites:
+                        cached_invite = bot.invite_cache[guild.id].get(invite.code)
+                        if cached_invite and invite.uses > cached_invite.uses:
+                            invite_used = invite
+                            inviter = invite.inviter
+                            break
+                bot.invite_cache[guild.id] = {invite.code: invite for invite in current_invites}
+            except Exception as e:
+                logger.warning(f"Could not track invite for {member.display_name}: {str(e)}")
+            
+            # Get log channel from config
             config = await bot.guild_configs.find_one({"guild_id": str(guild.id)})
-            if not config or not config.get('welcome_channel_id'):
-                return
+            log_channel_id = config.get('log_channel_id') if config else None
             
-            welcome_channel = bot.get_channel(int(config['welcome_channel_id']))
-            if not welcome_channel:
-                return
-            
-            # Create simple and respectful welcome embed
-            embed = discord.Embed(
-                title=f"🌟 Welcome {member.display_name}!",
-                description=f"We're delighted to have you join our wonderful community! Your presence here is truly valued and we're excited to have you as part of our server family.",
-                color=discord.Color.gold(),
-                timestamp=datetime.now(IST)
-            )
-            
-            # Set thumbnail to member's avatar
-            embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-            
-            # Set footer
-            embed.set_footer(
-                text=f"Welcome to {guild.name} • We're glad you're here! ✨",
-                icon_url=guild.icon.url if guild.icon else None
-            )
-            
-            # Add server banner if available
-            if guild.banner:
-                embed.set_image(url=guild.banner.url)
-            
-            await welcome_channel.send(content="@everyone", embed=embed)
-            logger.info(f'👋 Sent welcome message for {member.display_name} in {guild.name}')
-            
+            if log_channel_id:
+                log_channel = bot.get_channel(int(log_channel_id))
+                if log_channel:
+                    # Create message with mentions
+                    if inviter:
+                        msg = f"{member.mention} joined (invited by {inviter.mention})"
+                    else:
+                        msg = f"{member.mention} joined (inviter unknown)"
+                    
+                    await log_channel.send(msg)
+                    logger.info(f'📝 Logged member join: {msg}')
+
+            # Get welcome channel from config
+            welcome_channel_id = config.get('welcome_channel_id') if config else None
+            if welcome_channel_id:
+                welcome_channel = bot.get_channel(int(welcome_channel_id))
+                if welcome_channel:
+                    embed = discord.Embed(
+                        title="🌟 Welcome!",
+                        description=f"{member.mention}, we're delighted to have you join our wonderful community! Your presence here is truly valued and we're excited to have you as part of our server family.",
+                        color=discord.Color.gold(),
+                        timestamp=datetime.now(IST)
+                    )
+                    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+                    embed.set_footer(
+                        text=f"Welcome to {guild.name} • We're glad you're here! ✨",
+                        icon_url=guild.icon.url if guild.icon else None
+                    )
+                    if guild.banner:
+                        embed.set_image(url=guild.banner.url)
+                    await welcome_channel.send(content="@everyone", embed=embed)
+                    logger.info(f'👋 Sent welcome message for {member.display_name} in {guild.name}')
         except Exception as e:
-            logger.error(f'❌ Error sending welcome message: {str(e)}')
+            logger.error(f'❌ Error handling member join: {str(e)}')
 
     @bot.event
     async def on_member_remove(member):
-        """Handle member leave with logging"""
+        """Log leave as a single line: @UserX left"""
         try:
             guild = member.guild
-            
-            # Get guild config
             config = await bot.guild_configs.find_one({"guild_id": str(guild.id)})
-            if not config or not config.get('log_channel_id'):
-                return
-            
-            log_channel = bot.get_channel(int(config['log_channel_id']))
-            if not log_channel:
-                return
-            
-            # Create leave embed
-            embed = discord.Embed(
-                title="👋 Member Left",
-                description=f"**{member.display_name}** has left **{guild.name}**",
-                color=discord.Color.red(),
-                timestamp=datetime.now(IST)
-            )
-            
-            embed.add_field(
-                name="👤 Member Info",
-                value=f"**Name:** {member.display_name}\n**Joined:** <t:{int(member.joined_at.timestamp()) if member.joined_at else 0}:R>\n**Account Created:** <t:{int(member.created_at.timestamp())}:R>",
-                inline=True
-            )
-            
-            embed.add_field(
-                name="📊 Server Stats",
-                value=f"**Remaining Members:** {guild.member_count}\n**Left At:** <t:{int(datetime.now(IST).timestamp())}:F>",
-                inline=True
-            )
-            
-            embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-            embed.set_footer(text=f"Member left • {guild.name}")
-            
-            await log_channel.send(embed=embed)
-            logger.info(f'👋 Logged member leave: {member.display_name} from {guild.name}')
-            
+            log_channel_id = config.get('log_channel_id') if config else None
+            if log_channel_id:
+                log_channel = bot.get_channel(int(log_channel_id))
+                if log_channel:
+                    msg = f"{member.mention} left"
+                    await log_channel.send(msg)
+                    logger.info(f'👋 Logged member leave: {msg}')
         except Exception as e:
             logger.error(f'❌ Error logging member leave: {str(e)}')
 
@@ -476,6 +544,50 @@ def create_bot():
         if isinstance(error, commands.CommandNotFound):
             # Check if the command exists in our templates
             command = ctx.message.content.split()[0][1:].lower()  # Remove '!' and get command name
+            
+            # Check for common typos
+            typo_suggestions = {
+                "introbot": "botintro",
+                "botintro": "botintro",
+                "birthday": "birthday",
+                "config": "config",
+                "help": "help"
+            }
+            
+            if command in typo_suggestions:
+                suggested_command = typo_suggestions[command]
+                if suggested_command in bot.command_templates:
+                    template = bot.command_templates[suggested_command]
+                    
+                    embed = discord.Embed(
+                        title="🤖 Command Not Found",
+                        description=f"Did you mean **`!{suggested_command}`**?",
+                        color=discord.Color.blue()
+                    )
+                    
+                    embed.add_field(
+                        name="📋 Usage",
+                        value=f"`{template['usage']}`",
+                        inline=False
+                    )
+                    
+                    embed.add_field(
+                        name="💭 Description",
+                        value=template['description'],
+                        inline=False
+                    )
+                    
+                    if template['examples']:
+                        examples = "\n".join([f"`{ex}`" for ex in template['examples']])
+                        embed.add_field(
+                            name="💡 Examples",
+                            value=examples,
+                            inline=False
+                        )
+                    
+                    embed.set_footer(text=f"💡 Common typo: '{command}' → '{suggested_command}'")
+                    await ctx.send(embed=embed, delete_after=15)
+                    return
             
             # Only show template if this is an incomplete command
             existing_command = bot.get_command(command)
@@ -569,11 +681,19 @@ async def load_cogs(bot):
         'cogs.announce'
     ]
     
+    loaded_cogs = 0
+    total_cogs = len(cogs)
+    
     for cog in cogs:
         try:
             await bot.load_extension(cog)
             logger.info(f'✅ Loaded cog: {cog}')
+            loaded_cogs += 1
         except Exception as e:
             logger.error(f'❌ Failed to load cog {cog}: {str(e)}')
+            # Continue loading other cogs even if one fails
     
-    logger.info('�� All cogs loaded')
+    logger.info(f'📦 Loaded {loaded_cogs}/{total_cogs} cogs successfully')
+    
+    if loaded_cogs < total_cogs:
+        logger.warning(f'⚠️ {total_cogs - loaded_cogs} cog(s) failed to load')
