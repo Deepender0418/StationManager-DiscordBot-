@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
 Discord Server Manager Bot - Main Entry Point
+
+This is the main entry point for the Discord bot application.
+It handles:
+- Environment variable loading
+- Logging setup
+- Bot initialization
+- Web server startup
+- Error handling and graceful shutdown
+
+The bot runs both a Discord bot and a web interface simultaneously.
 """
 
 import os
@@ -8,60 +18,141 @@ import logging
 import asyncio
 from dotenv import load_dotenv
 
-# Load environment variables first
+# ============================================================================
+# ENVIRONMENT SETUP SECTION
+# ============================================================================
+
+# Load environment variables from .env file first
+# This must be done before importing any other modules that use env vars
 load_dotenv()
 
-# Setup logging
+# ============================================================================
+# LOGGING CONFIGURATION SECTION
+# ============================================================================
+
+# Configure logging for the entire application
+# This sets up how log messages are formatted and displayed
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    level=logging.INFO,  # Log level: INFO shows important messages, DEBUG shows everything
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Format: timestamp - module - level - message
+    handlers=[logging.StreamHandler()]  # Output logs to console
 )
 
+# Create a logger for this specific module
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# MAIN FUNCTION SECTION
+# ============================================================================
+
 def main():
-    """Main function to start the bot"""
+    """
+    Main function that starts the Discord bot and web server
+    
+    This function:
+    1. Validates required environment variables
+    2. Creates the Discord bot instance
+    3. Starts the web server in a background thread
+    4. Starts the Discord bot
+    5. Handles shutdown gracefully
+    
+    The bot runs both a Discord bot and a web interface simultaneously.
+    The web interface provides a user-friendly way to configure the bot.
+    """
     try:
-        # Import bot after environment is loaded
+        # Import bot and web server modules after environment is loaded
+        # This ensures environment variables are available when modules are imported
         from bot import create_bot
         from web_server import create_app, run_web_server
         from threading import Thread
         
-        # Validate environment
+        # ============================================================================
+        # ENVIRONMENT VALIDATION SECTION
+        # ============================================================================
+        
+        # Check for required environment variables
+        # These are essential for the bot to function properly
         if not os.getenv('DISCORD_TOKEN'):
             logger.error("❌ DISCORD_TOKEN environment variable not set!")
+            logger.error("Please add your Discord bot token to the .env file")
             return
         
         if not os.getenv('MONGO_URI'):
             logger.error("❌ MONGO_URI environment variable not set!")
+            logger.error("Please add your MongoDB connection string to the .env file")
             return
         
         logger.info("🚀 Starting Discord Server Manager Bot...")
         
-        # Create bot instance (synchronous now)
+        # ============================================================================
+        # BOT INITIALIZATION SECTION
+        # ============================================================================
+        
+        # Create the Discord bot instance
+        # This sets up all the bot configuration, database connections, and cogs
         bot = create_bot()
         
-        # Create web server
+        # ============================================================================
+        # WEB SERVER SETUP SECTION
+        # ============================================================================
+        
+        # Create the Flask web application
+        # The web interface allows users to configure the bot through a browser
         app = create_app(bot)
         
-        # Start web server in background thread
+        # Start the web server in a background thread
+        # This allows the web interface to run alongside the Discord bot
         web_thread = Thread(target=run_web_server, args=(app,))
-        web_thread.daemon = True
+        web_thread.daemon = True  # Daemon threads are killed when main program exits
         web_thread.start()
         logger.info("🌐 Web server started on port 8080")
+        logger.info("🌐 Web interface available at: http://localhost:8080")
         
-        # Start the bot
+        # ============================================================================
+        # BOT STARTUP SECTION
+        # ============================================================================
+        
+        # Start the Discord bot
+        # This connects to Discord and begins processing events
         logger.info("🤖 Starting Discord bot...")
         bot.run(os.getenv('DISCORD_TOKEN'))
         
+    # ============================================================================
+    # ERROR HANDLING SECTION
+    # ============================================================================
+    
     except KeyboardInterrupt:
-        logger.info("👋 Bot stopped by user")
+        """
+        Handle Ctrl+C gracefully
+        This allows users to stop the bot cleanly with Ctrl+C
+        """
+        logger.info("👋 Bot stopped by user (Ctrl+C)")
+        
     except SystemExit:
+        """
+        Handle system exit gracefully
+        This occurs when the bot is shut down programmatically
+        """
         logger.info("🔄 Bot shutting down")
+        
     except Exception as e:
+        """
+        Handle any unexpected errors
+        This catches any errors that weren't handled elsewhere
+        """
         logger.error(f"❌ Fatal error: {str(e)}", exc_info=True)
+        logger.error("The bot has encountered an unexpected error and needs to shut down")
         raise
 
+# ============================================================================
+# ENTRY POINT SECTION
+# ============================================================================
+
 if __name__ == '__main__':
+    """
+    Entry point when this file is run directly
+    
+    This ensures the main function is only called when this file is executed,
+    not when it's imported as a module.
+    """
     main()
