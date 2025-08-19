@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-Discord Bot Core - Handles Discord events and cog management
+Discord Bot Core - Main bot file that handles Discord events and cog management
+
+This file contains:
+- Bot creation and configuration
+- Database connection setup
+- Background task scheduling (birthdays, events)
+- Core event handlers (ready, disconnect, resume, close)
+- Command error handling and autocomplete
+- Cog loading system
+
+The bot is designed to be modular with separate cogs handling specific features.
 """
 
 import os
@@ -15,153 +25,67 @@ from utils.database import get_guild_config
 
 logger = logging.getLogger(__name__)
 
-async def send_birthday_announcements(bot):
-    """Send birthday announcements for today"""
-    try:
-        today = datetime.now(IST)
-        today_str = f"{today.month:02d}-{today.day:02d}"
-        
-        logger.info(f"Checking for birthdays on {today_str}")
-        
-        # Get all birthdays for today
-        cursor = bot.birthdays.find({"birthday": today_str})
-        birthdays = await cursor.to_list(length=None)
-        
-        if not birthdays:
-            logger.info("No birthdays today")
-            return
-        
-        logger.info(f"Found {len(birthdays)} birthdays today")
-        
-        # Group birthdays by guild
-        guild_birthdays = {}
-        for birthday_doc in birthdays:
-            guild_id = birthday_doc.get('guild_id')
-            # Convert to string for consistent comparison
-            guild_id_str = str(guild_id)
-            if guild_id_str not in guild_birthdays:
-                guild_birthdays[guild_id_str] = []
-            guild_birthdays[guild_id_str].append(birthday_doc)
-        
-        # Send announcements for each guild
-        for guild_id_str, guild_birthday_list in guild_birthdays.items():
-            try:
-                # Convert back to int for get_guild
-                guild_id = int(guild_id_str)
-                guild = bot.get_guild(guild_id)
-                if not guild:
-                    continue
-                
-                # Get guild config
-                config = await get_guild_config(bot.guild_configs, str(guild_id))
-                announcement_channel_id = config.get('announcement_channel_id') if config else None
-                default_message = config.get('birthday_message', "🎉 **Happy Birthday {USER_MENTION}!** 🎉\nHope you have an amazing day!")
-                
-                if not announcement_channel_id:
-                    logger.warning(f"No announcement channel configured for guild {guild_id}")
-                    continue
-                
-                announcement_channel = bot.get_channel(int(announcement_channel_id))
-                if not announcement_channel:
-                    logger.warning(f"Announcement channel not found for guild {guild_id}")
-                    continue
-                
-                # Create birthday announcement for all members
-                birthday_members = []
-                for birthday_doc in guild_birthday_list:
-                    user_id = birthday_doc.get('user_id')
-                    member = guild.get_member(user_id)
-                    if member:
-                        birthday_members.append({
-                            'member': member,
-                            'custom_message': birthday_doc.get('custom_message')
-                        })
-                
-                if not birthday_members:
-                    continue
-                
-                # Send individual birthday announcement for each member
-                for member_data in birthday_members:
-                    member = member_data['member']
-                    custom_message = member_data['custom_message']
-                    
-                    # Use custom message if available, otherwise use default
-                    if custom_message:
-                        message = custom_message.replace('{USER_MENTION}', member.mention).replace('{USER_NAME}', member.display_name)
-                    else:
-                        message = default_message.replace('{USER_MENTION}', member.mention).replace('{USER_NAME}', member.display_name)
-                    
-                    # Create embed with profile picture and custom text
-                    embed = discord.Embed(
-                        title="🎂 Birthday Celebration!",
-                        description=message,
-                        color=discord.Color.pink()
-                    )
-                    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-                    embed.set_footer(text=f"🎈 {member.display_name} is celebrating today!")
-                    
-                    # Send @everyone outside the embed, custom message inside
-                    await announcement_channel.send(content="@everyone", embed=embed)
-                    logger.info(f"Sent birthday announcement for {member.display_name} in {guild.name}")
-                
-            except Exception as e:
-                logger.error(f"Error sending birthday announcements for guild {guild_id}: {str(e)}")
-                
-    except Exception as e:
-        logger.error(f"Error checking today's birthdays: {str(e)}")
-
-async def send_daily_events_announcement(bot):
-    """Send daily events announcement at 8 AM"""
-    try:
-        # Import the function from events cog
-        from cogs.events import EventsCog
-        events_cog = EventsCog(bot)
-        await events_cog.send_daily_events_announcement()
-    except Exception as e:
-        logger.error(f"Error sending daily events announcement: {str(e)}")
-
 def create_bot():
-    """Create and configure the Discord bot"""
-
-    # Bot configuration
+    """
+    Create and configure the Discord bot instance
+    
+    This function:
+    1. Sets up bot intents and configuration
+    2. Establishes MongoDB connection
+    3. Configures command templates for autocomplete
+    4. Sets up background tasks for scheduled events
+    5. Defines core event handlers
+    """
+    
+    # ============================================================================
+    # BOT CONFIGURATION SECTION
+    # ============================================================================
+    
+    # Configure Discord bot intents (permissions)
     intents = discord.Intents.default()
-    intents.members = True
-    intents.message_content = True
-    intents.presences = False
+    intents.members = True          # Required for member join/leave events
+    intents.message_content = True  # Required for reading message content
+    intents.presences = False       # Not needed, saves resources
 
+    # Create the bot instance with prefix and intents
     bot = commands.Bot(
-        command_prefix=os.getenv('COMMAND_PREFIX', '!'),
+        command_prefix=os.getenv('COMMAND_PREFIX', '!'),  # Default prefix is '!'
         intents=intents,
-        help_command=None
+        help_command=None  # We'll use our custom help system
     )
 
-    # Database setup
+    # ============================================================================
+    # DATABASE CONNECTION SECTION
+    # ============================================================================
+    
+    # Get database configuration from environment variables
     mongo_uri = os.getenv('MONGO_URI')
     db_name = os.getenv('DATABASE_NAME', 'discord_bot')
 
-    # MongoDB connection with proper options for Atlas
+    # Establish MongoDB connection with optimized settings for Atlas
     try:
         client = motor.motor_asyncio.AsyncIOMotorClient(
             mongo_uri,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=10000,
-            socketTimeoutMS=10000,
-            maxPoolSize=10,
-            retryWrites=True,
-            retryReads=True,
-            w='majority'
+            serverSelectionTimeoutMS=5000,    # 5 second timeout for server selection
+            connectTimeoutMS=10000,           # 10 second timeout for initial connection
+            socketTimeoutMS=10000,            # 10 second timeout for operations
+            maxPoolSize=10,                   # Maximum 10 connections in pool
+            retryWrites=True,                 # Automatically retry failed writes
+            retryReads=True,                  # Automatically retry failed reads
+            w='majority'                      # Wait for majority of replicas
         )
         db = client[db_name]
         
         logger.info("🔌 MongoDB connection established")
         
-        bot.guild_configs = db.guild_configs
-        bot.birthdays = db.birthdays
-        bot.invite_logs = db.invite_logs
-        bot.invite_cache = {}
-        bot.mongo_client = client  # Store client for cleanup
+        # Attach database collections to bot for easy access in cogs
+        bot.guild_configs = db.guild_configs    # Server configuration settings
+        bot.birthdays = db.birthdays           # User birthday records
+        bot.invite_logs = db.invite_logs       # Member join/leave tracking
+        bot.invite_cache = {}                  # Cache for invite tracking
+        bot.mongo_client = client              # Store client for cleanup
         
-        # Flag to prevent duplicate task creation
+        # Flag to prevent duplicate background task creation
         bot.tasks_started = False
         
         logger.info("✅ MongoDB collections configured successfully")
@@ -171,7 +95,12 @@ def create_bot():
         logger.error("Please check your MONGO_URI and MongoDB Atlas configuration")
         raise
 
-    # Command templates for autocomplete
+    # ============================================================================
+    # COMMAND TEMPLATES SECTION
+    # ============================================================================
+    
+    # Define command templates for autocomplete and help system
+    # These provide helpful information when users type incomplete commands
     bot.command_templates = {
         "birthday": {
             "description": "Set birthday (Admin: @user MM-DD [message] | User: MM-DD)",
@@ -247,13 +176,25 @@ def create_bot():
         }
     }
 
+    # ============================================================================
+    # BACKGROUND TASKS SECTION
+    # ============================================================================
+    
     async def check_birthdays_at_midnight():
-        """Check for birthdays at midnight every day"""
-        await bot.wait_until_ready()
+        """
+        Background task that runs every day at midnight to check for birthdays
+        
+        This task:
+        1. Calculates time until next midnight
+        2. Sleeps until midnight
+        3. Calls the birthday cog to send announcements
+        4. Handles errors gracefully with retry logic
+        """
+        await bot.wait_until_ready()  # Wait for bot to be fully connected
         
         while not bot.is_closed():
             try:
-                # Calculate time until next midnight
+                # Calculate time until next midnight in IST timezone
                 now = datetime.now(IST)
                 next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
                 seconds_until_midnight = (next_midnight - now).total_seconds()
@@ -261,8 +202,10 @@ def create_bot():
                 logger.info(f"Waiting {seconds_until_midnight} seconds until next midnight birthday check")
                 await asyncio.sleep(seconds_until_midnight)
                 
-                # Check for birthdays
-                await send_birthday_announcements(bot)
+                # Check for birthdays using the birthday cog
+                birthday_cog = bot.get_cog('BirthdayCog')
+                if birthday_cog:
+                    await birthday_cog.send_birthday_announcements()
                 
             except asyncio.CancelledError:
                 logger.info("Birthday check task cancelled")
@@ -272,12 +215,20 @@ def create_bot():
                 await asyncio.sleep(3600)  # Wait 1 hour if error occurs
 
     async def check_daily_events_at_8am():
-        """Check for daily events at 8 AM every day"""
-        await bot.wait_until_ready()
+        """
+        Background task that runs every day at 8 AM to send daily events
+        
+        This task:
+        1. Calculates time until next 8 AM
+        2. Sleeps until 8 AM
+        3. Calls the events cog to send daily announcements
+        4. Handles errors gracefully with retry logic
+        """
+        await bot.wait_until_ready()  # Wait for bot to be fully connected
         
         while not bot.is_closed():
             try:
-                # Calculate time until next 8 AM
+                # Calculate time until next 8 AM in IST timezone
                 now = datetime.now(IST)
                 next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
                 
@@ -290,8 +241,10 @@ def create_bot():
                 logger.info(f"Waiting {seconds_until_8am} seconds until next 8 AM events check")
                 await asyncio.sleep(seconds_until_8am)
                 
-                # Send daily events announcement
-                await send_daily_events_announcement(bot)
+                # Send daily events announcement using the events cog
+                events_cog = bot.get_cog('EventsCog')
+                if events_cog:
+                    await events_cog.send_daily_events_announcement()
                 
             except asyncio.CancelledError:
                 logger.info("Daily events check task cancelled")
@@ -300,43 +253,44 @@ def create_bot():
                 logger.error(f"Error in 8 AM events check: {str(e)}")
                 await asyncio.sleep(3600)  # Wait 1 hour if error occurs
 
-    # Array of different welcome messages that rotate
-    welcome_messages = [
-        "We're delighted to have you join our community! Your presence here is truly valued. Welcome aboard, and we hope you have an amazing time with us! 🌟",
-        "Welcome to our wonderful community! We're so excited to have you here. Your journey with us begins now, and we can't wait to see what you'll bring to our server! ✨",
-        "A warm welcome to our newest member! You've just joined an amazing community filled with wonderful people. We're thrilled to have you here! 🎉",
-        "Welcome aboard! You've found your way to our special community, and we're absolutely delighted to have you here. Let's make some amazing memories together! 🌈",
-        "Hello and welcome! You've just joined a fantastic community where everyone is valued and appreciated. We're so glad you're here! 🎊",
-        "Welcome to our family! You've just become part of something truly special. We're excited to get to know you and share this amazing journey together! 💫",
-        "A heartfelt welcome to our newest member! You've joined a community that values friendship, respect, and fun. We're so happy you're here! 🌟",
-        "Welcome to our wonderful server! You've just stepped into a community filled with amazing people and great vibes. We're excited to have you here! ✨"
-    ]
-    current_welcome_index = 0
-
+    # ============================================================================
+    # CORE EVENT HANDLERS SECTION
+    # ============================================================================
+    
     @bot.event
     async def on_ready():
-        """Called when the bot is ready"""
+        """
+        Called when the bot successfully connects to Discord
+        
+        This event handler:
+        1. Logs successful connection
+        2. Loads all cogs (feature modules)
+        3. Caches invites for tracking
+        4. Initializes guild configurations
+        5. Starts background tasks
+        """
         logger.info(f"🤖 Bot is ready! Logged in as {bot.user}")
         logger.info(f"📊 Connected to {len(bot.guilds)} guilds")
         
-        # Load cogs
+        # Load all cogs (feature modules)
         await load_cogs(bot)
         
-        # Cache invites for all guilds
+        # Cache invites for all guilds (needed for invite tracking)
         for guild in bot.guilds:
             try:
                 invites = await guild.invites()
-                bot.invite_cache[guild.id] = invites
+                # Store as mapping for O(1) lookup by invite code
+                bot.invite_cache[guild.id] = {invite.code: invite for invite in invites}
                 logger.info(f"📋 Cached {len(invites)} invites for {guild.name}")
             except Exception as e:
                 logger.warning(f"Could not cache invites for {guild.name}: {str(e)}")
         
-        # Initialize guild configs
+        # Initialize guild configurations (create default configs if they don't exist)
         for guild in bot.guilds:
             try:
                 config = await get_guild_config(bot.guild_configs, str(guild.id))
                 if not config:
-                    # Create default config
+                    # Create default config for new guilds
                     await bot.guild_configs.insert_one({
                         "guild_id": str(guild.id),
                         "guild_name": guild.name,
@@ -348,7 +302,7 @@ def create_bot():
             except Exception as e:
                 logger.error(f"❌ Error initializing config for {guild.name}: {str(e)}")
         
-        # Start background tasks only once
+        # Start background tasks only once (prevent duplicates)
         if not bot.tasks_started:
             bot.loop.create_task(check_birthdays_at_midnight())
             bot.loop.create_task(check_daily_events_at_8am())
@@ -356,7 +310,7 @@ def create_bot():
             logger.info("🎂 Birthday check task started")
             logger.info("📅 Daily events check task started (8 AM)")
             
-            # Calculate time until next midnight
+            # Calculate and log timing information
             now = datetime.now(IST)
             next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
             seconds_until_midnight = (next_midnight - now).total_seconds()
@@ -378,7 +332,12 @@ def create_bot():
 
     @bot.event
     async def on_disconnect():
-        """Called when the bot disconnects"""
+        """
+        Called when the bot disconnects from Discord
+        
+        This handler keeps MongoDB connection alive during temporary disconnects
+        to avoid connection overhead when the bot reconnects.
+        """
         logger.warning("🔌 Bot disconnected from Discord")
         
         # Don't close MongoDB connection on disconnect - only on shutdown
@@ -387,7 +346,12 @@ def create_bot():
 
     @bot.event
     async def on_resumed():
-        """Called when the bot resumes connection"""
+        """
+        Called when the bot resumes connection after a disconnect
+        
+        This handler verifies the MongoDB connection is still alive and
+        reconnects if necessary.
+        """
         logger.info("🔄 Bot resumed connection to Discord")
         
         # Verify MongoDB connection is still alive
@@ -409,7 +373,7 @@ def create_bot():
                 if hasattr(bot, 'mongo_client') and bot.mongo_client:
                     bot.mongo_client.close()
                 
-                # Create new client
+                # Create new client with same settings
                 client = motor.motor_asyncio.AsyncIOMotorClient(
                     mongo_uri,
                     serverSelectionTimeoutMS=5000,
@@ -422,6 +386,7 @@ def create_bot():
                 )
                 db = client[db_name]
                 
+                # Reattach collections to bot
                 bot.guild_configs = db.guild_configs
                 bot.birthdays = db.birthdays
                 bot.invite_logs = db.invite_logs
@@ -433,7 +398,12 @@ def create_bot():
 
     @bot.event
     async def on_close():
-        """Called when the bot is shutting down"""
+        """
+        Called when the bot is shutting down
+        
+        This handler properly closes the MongoDB connection to prevent
+        resource leaks and ensure clean shutdown.
+        """
         logger.info("🔄 Bot is shutting down...")
         
         # Close MongoDB connection only on actual shutdown
@@ -444,108 +414,26 @@ def create_bot():
             except Exception as e:
                 logger.error(f"Error closing MongoDB connection: {str(e)}")
 
-    @bot.event
-    async def on_member_join(member):
-        """Log join as a single line: @UserX joined (invited by @UserY) or (inviter unknown)"""
-        try:
-            guild = member.guild
-            invite_used = None
-            inviter = None
-            
-            # Check invites to find who invited the user
-            try:
-                current_invites = await guild.invites()
-                if guild.id in bot.invite_cache:
-                    for invite in current_invites:
-                        cached_invite = bot.invite_cache[guild.id].get(invite.code)
-                        if cached_invite and invite.uses > cached_invite.uses:
-                            invite_used = invite
-                            inviter = invite.inviter
-                            break
-                bot.invite_cache[guild.id] = {invite.code: invite for invite in current_invites}
-            except Exception as e:
-                logger.warning(f"Could not track invite for {member.display_name}: {str(e)}")
-            
-            # Get log channel from config
-            config = await bot.guild_configs.find_one({"guild_id": str(guild.id)})
-            log_channel_id = config.get('log_channel_id') if config else None
-            
-            if log_channel_id:
-                log_channel = bot.get_channel(int(log_channel_id))
-                if log_channel:
-                    # Create message with mentions
-                    if inviter:
-                        msg = f"{member.mention} joined (invited by {inviter.mention})"
-                    else:
-                        msg = f"{member.mention} joined (inviter unknown)"
-                    
-                    await log_channel.send(msg)
-                    logger.info(f'📝 Logged member join: {msg}')
-
-            # Get welcome channel from config
-            welcome_channel_id = config.get('welcome_channel_id') if config else None
-            if welcome_channel_id:
-                welcome_channel = bot.get_channel(int(welcome_channel_id))
-                if welcome_channel:
-                    embed = discord.Embed(
-                        title="🌟 Welcome!",
-                        description=f"{member.mention}, we're delighted to have you join our wonderful community! Your presence here is truly valued and we're excited to have you as part of our server family.",
-                        color=discord.Color.gold(),
-                        timestamp=datetime.now(IST)
-                    )
-                    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-                    embed.set_footer(
-                        text=f"Welcome to {guild.name} • We're glad you're here! ✨",
-                        icon_url=guild.icon.url if guild.icon else None
-                    )
-                    if guild.banner:
-                        embed.set_image(url=guild.banner.url)
-                    await welcome_channel.send(content="@everyone", embed=embed)
-                    logger.info(f'👋 Sent welcome message for {member.display_name} in {guild.name}')
-        except Exception as e:
-            logger.error(f'❌ Error handling member join: {str(e)}')
-
-    @bot.event
-    async def on_member_remove(member):
-        """Log leave as a single line: @UserX left"""
-        try:
-            guild = member.guild
-            config = await bot.guild_configs.find_one({"guild_id": str(guild.id)})
-            log_channel_id = config.get('log_channel_id') if config else None
-            if log_channel_id:
-                log_channel = bot.get_channel(int(log_channel_id))
-                if log_channel:
-                    msg = f"{member.mention} left"
-                    await log_channel.send(msg)
-                    logger.info(f'👋 Logged member leave: {msg}')
-        except Exception as e:
-            logger.error(f'❌ Error logging member leave: {str(e)}')
-
-    @bot.event
-    async def on_invite_create(invite):
-        """Track new invites"""
-        guild_id = invite.guild.id
-        if guild_id not in bot.invite_cache:
-            bot.invite_cache[guild_id] = {}
-        bot.invite_cache[guild_id][invite.code] = invite
-        logger.info(f'📝 New invite created: {invite.code} for {invite.guild.name}')
-
-    @bot.event
-    async def on_invite_delete(invite):
-        """Track deleted invites"""
-        guild_id = invite.guild.id
-        if guild_id in bot.invite_cache and invite.code in bot.invite_cache[guild_id]:
-            del bot.invite_cache[guild_id][invite.code]
-            logger.info(f'🗑️ Invite deleted: {invite.code} from {invite.guild.name}')
-
+    # ============================================================================
+    # COMMAND ERROR HANDLING SECTION
+    # ============================================================================
+    
     @bot.event
     async def on_command_error(ctx, error):
-        """Handle command errors and show helpful templates"""
+        """
+        Handle command errors and provide helpful feedback
+        
+        This handler:
+        1. Detects when users type incorrect commands
+        2. Suggests correct commands for common typos
+        3. Shows command templates for incomplete commands
+        4. Provides helpful error messages
+        """
         if isinstance(error, commands.CommandNotFound):
             # Check if the command exists in our templates
             command = ctx.message.content.split()[0][1:].lower()  # Remove '!' and get command name
             
-            # Check for common typos
+            # Check for common typos and suggest corrections
             typo_suggestions = {
                 "introbot": "botintro",
                 "botintro": "botintro",
@@ -559,6 +447,7 @@ def create_bot():
                 if suggested_command in bot.command_templates:
                     template = bot.command_templates[suggested_command]
                     
+                    # Create helpful error embed
                     embed = discord.Embed(
                         title="🤖 Command Not Found",
                         description=f"Did you mean **`!{suggested_command}`**?",
@@ -589,7 +478,7 @@ def create_bot():
                     await ctx.send(embed=embed, delete_after=15)
                     return
             
-            # Only show template if this is an incomplete command
+            # Show template for incomplete commands
             existing_command = bot.get_command(command)
             if command in bot.command_templates and not existing_command:
                 template = bot.command_templates[command]
@@ -620,13 +509,21 @@ def create_bot():
                 await ctx.send(embed=embed, delete_after=15)
                 return
         
-        # For other errors, log them
+        # For other errors, log them for debugging
         logger.error(f"Command error: {error}")
 
     @bot.event
     async def on_message(message):
-        """Handle message events for autocomplete"""
-        # Process commands first
+        """
+        Handle message events for autocomplete functionality
+        
+        This handler:
+        1. Processes commands normally
+        2. Checks for incomplete command-like messages
+        3. Shows helpful command templates
+        4. Provides autocomplete suggestions
+        """
+        # Process commands first (required for command handling)
         await bot.process_commands(message)
         
         # Check for autocomplete on incomplete command-like messages only
@@ -662,7 +559,7 @@ def create_bot():
                 
                 embed.set_footer(text="💡 Type the full command to execute it!")
                 
-                # Send the template info
+                # Send the template info (ignore errors if we can't send)
                 try:
                     await message.channel.send(embed=embed, delete_after=10)
                 except:
@@ -670,20 +567,43 @@ def create_bot():
 
     return bot
 
+# ============================================================================
+# COG LOADING SECTION
+# ============================================================================
+
 async def load_cogs(bot):
-    """Load all cogs"""
+    """
+    Load all cogs (feature modules) into the bot
+    
+    This function:
+    1. Defines the list of cogs to load
+    2. Attempts to load each cog
+    3. Continues loading even if some cogs fail
+    4. Provides detailed logging of the loading process
+    
+    Cogs are modular components that handle specific bot features:
+    - config: Server configuration and welcome messages
+    - birthday: Birthday management and announcements
+    - events: Daily events and holiday announcements
+    - help: Help system and command documentation
+    - sync: Command synchronization with Discord
+    - announce: Server announcement commands
+    - invite_tracking: Member join/leave tracking and invite statistics
+    """
     cogs = [
-        'cogs.config',
-        'cogs.birthday',
-        'cogs.events',
-        'cogs.help',
-        'cogs.sync',
-        'cogs.announce'
+        'cogs.config',           # Server configuration and welcome messages
+        'cogs.birthday',         # Birthday management and announcements
+        'cogs.events',           # Daily events and holiday announcements
+        'cogs.help',             # Help system and command documentation
+        'cogs.sync',             # Command synchronization with Discord
+        'cogs.announce',         # Server announcement commands
+        'cogs.invite_tracking'   # Member join/leave tracking and invite statistics
     ]
     
     loaded_cogs = 0
     total_cogs = len(cogs)
     
+    # Load each cog individually
     for cog in cogs:
         try:
             await bot.load_extension(cog)
