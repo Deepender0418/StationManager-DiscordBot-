@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Manager - Guilds</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container { max-width: 1100px; }
+        .header { color: white; text-align: center; padding: 40px 10px; }
+        .guild-card { 
+            background: rgba(255,255,255,0.95);
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform .2s ease;
+        }
+        .guild-card:hover { transform: translateY(-4px); }
+        .guild-icon { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+        .status-badge { border-radius: 999px; padding: 6px 12px; font-weight: 600; }
+        .footer { color: rgba(255,255,255,.8); text-align: center; padding: 20px; }
+    </style>
+    </head>
+<body>
+    <div class="container py-4">
+        <div class="header">
+            <h1 class="mb-1"><i class="bi bi-hdd-network"></i> Server Manager</h1>
+            <p class="mb-0">Logged in as <strong>{{ bot.name }}</strong> • Status: 
+                <span class="badge bg-{{ 'success' if bot.status == 'Online' else 'secondary' }} status-badge">{{ bot.status }}</span>
+            </p>
+            <small>Uptime: {{ bot.uptime }}</small>
+        </div>
+
+        <div class="card guild-card p-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0"><i class="bi bi-people"></i> Your Guilds ({{ bot.guilds }})</h4>
+                    <a class="btn btn-outline-primary" href="/api/guilds" target="_blank"><i class="bi bi-box-arrow-up-right"></i> API</a>
+                </div>
+
+                {% if guilds and guilds|length > 0 %}
+                <div class="row g-3">
+                    {% for g in guilds %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3 h-100 d-flex flex-column">
+                            <div class="d-flex align-items-center mb-2">
+                                {% if g.icon_url %}
+                                <img class="guild-icon me-3" src="{{ g.icon_url }}" alt="icon">
+                                {% else %}
+                                <div class="guild-icon me-3 d-flex align-items-center justify-content-center bg-primary text-white">
+                                    <i class="bi bi-discord"></i>
+                                </div>
+                                {% endif %}
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">{{ g.name }}</div>
+                                    <small class="text-muted">ID: {{ g.id }} • {{ g.member_count }} members</small>
+                                </div>
+                            </div>
+                            <div class="mt-auto d-grid gap-2">
+                                <a class="btn btn-primary" href="/config/{{ g.id }}"><i class="bi bi-gear"></i> Configure</a>
+                                <a class="btn btn-outline-secondary" href="/birthdays/{{ g.id }}"><i class="bi bi-balloon-heart"></i> Birthdays</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-info m-0">
+                    <i class="bi bi-info-circle"></i> The bot is not in any guilds yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="footer mt-4">
+            <small>Web interface powered by Flask • Manage your Discord servers with ease</small>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+
