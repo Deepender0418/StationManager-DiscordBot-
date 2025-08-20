@@ -19,9 +19,11 @@ import discord
 from discord.ext import commands, tasks
 from groq import Groq
 import logging
+import json
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 from utils.timezone import IST
+from bson import json_util
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +102,10 @@ class GwenChatCog(commands.Cog):
         try:
             key = ctx.channel.id if ctx.guild else ctx.author.id
             doc = self.conversations.find_one({"_id": key})
-            return doc["history"] if doc and "history" in doc else []
+            if doc and "history" in doc:
+                # Extract only role and content for API compatibility
+                return [{"role": msg["role"], "content": msg["content"]} for msg in doc["history"]]
+            return []
         except Exception as e:
             logger.error(f"Error retrieving conversation history: {str(e)}")
             return []
@@ -132,10 +137,18 @@ class GwenChatCog(commands.Cog):
             else:
                 history = doc.get("history", [])
             
-            # Add new messages to history
+            # Add new messages to history (store timestamp as string for JSON serialization)
             history.extend([
-                {"role": "user", "content": user_message, "timestamp": datetime.utcnow()},
-                {"role": "assistant", "content": bot_response, "timestamp": datetime.utcnow()}
+                {
+                    "role": "user", 
+                    "content": user_message, 
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                {
+                    "role": "assistant", 
+                    "content": bot_response, 
+                    "timestamp": datetime.utcnow().isoformat()
+                }
             ])
             
             # Trim history if too long
@@ -195,10 +208,18 @@ class GwenChatCog(commands.Cog):
             # Add current message
             messages.append({"role": "user", "content": message})
             
+            # Ensure all messages are JSON serializable
+            serializable_messages = []
+            for msg in messages:
+                serializable_messages.append({
+                    "role": msg["role"],
+                    "content": str(msg["content"])  # Ensure content is string
+                })
+            
             # Call Groq API
             chat_completion = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
-                messages=messages,
+                messages=serializable_messages,
                 max_tokens=80,
                 temperature=0.75
             )
