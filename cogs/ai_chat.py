@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Enhanced Gwen Chat Cog with Personal Context - AI-Powered Gwen Stacy Character Chat System
+Enhanced Gwen Chat Cog with Server Teasing - AI-Powered Gwen Stacy Character Chat System
 
 This enhanced version adds:
 - Personal context about macjr (son) and annachan (Valorant duo)
-- Online status tracking for macjr and annachan
-- Special greetings when they come online
+- Server-based teasing when they come online (not DMs to owner)
+- Direct mentions in the server based on their roles
 - DM support without requiring mentions
 - 24-hour teasing interval
 """
@@ -25,14 +25,15 @@ logger = logging.getLogger(__name__)
 
 class GwenChatCog(commands.Cog):
     """
-    Enhanced Gwen Stacy chat cog with personal context and online tracking
+    Enhanced Gwen Stacy chat cog with personal context and server teasing
     
     This cog provides:
     - Character-accurate Gwen Stacy personality with personal context
     - Tracking for macjr (son) and annachan (Valorant duo)
-    - Special greetings when they come online
+    - Server-based teasing when they come online
+    - Direct mentions based on their server roles
     - MongoDB-backed conversation history
-    - Automatic teasing messages to the bot owner every 24 hours
+    - Automatic teasing messages in the server
     - DM support without requiring mentions
     """
     
@@ -51,9 +52,11 @@ class GwenChatCog(commands.Cog):
         self.macjr_id = int(os.getenv("MACJR_ID", 0))
         self.annachan_id = int(os.getenv("ANNACHAN_ID", 0))
         
+        # Notification channel ID (where to send online notifications)
+        self.notification_channel_id = int(os.getenv("NOTIFICATION_CHANNEL_ID", 0))
+        
         # Track online status
         self.online_status = {
-            self.owner_id: False,
             self.macjr_id: False,
             self.annachan_id: False
         }
@@ -67,7 +70,7 @@ class GwenChatCog(commands.Cog):
         self.tease_task.start()
         self.cleanup_task.start()
         
-        logger.info("Enhanced Gwen chat cog with personal context initialized")
+        logger.info("Enhanced Gwen chat cog with server teasing initialized")
     
     def cog_unload(self):
         """
@@ -84,7 +87,7 @@ class GwenChatCog(commands.Cog):
         logger.info("Enhanced Gwen chat cog ready")
         
         # Initialize online status tracking
-        for user_id in [self.owner_id, self.macjr_id, self.annachan_id]:
+        for user_id in [self.macjr_id, self.annachan_id]:
             user = self.bot.get_user(user_id)
             if user:
                 self.online_status[user_id] = user.status != discord.Status.offline
@@ -92,11 +95,11 @@ class GwenChatCog(commands.Cog):
     @commands.Cog.listener()
     async def on_presence_update(self, before, after):
         """
-        Track when specific users come online
+        Track when specific users come online and tease them in the server
         
         This listener:
         1. Checks if macjr or annachan come online
-        2. Sends a special greeting if they were previously offline
+        2. Sends a teasing message in the notification channel if they were previously offline
         3. Updates online status tracking
         """
         # Check if this is one of our tracked users
@@ -108,23 +111,24 @@ class GwenChatCog(commands.Cog):
         is_now_online = after.status != discord.Status.offline
         
         if was_offline and is_now_online:
-            # Get the owner to send the message to
-            owner = self.bot.get_user(self.owner_id)
-            if not owner:
+            # Get the notification channel
+            channel = self.bot.get_channel(self.notification_channel_id)
+            if not channel:
+                logger.warning("Notification channel not found")
                 return
             
-            # Generate appropriate greeting based on who came online
+            # Generate appropriate teasing message based on who came online
             if after.id == self.macjr_id:
-                greeting = f"Hey {owner.mention}! Our little web-slinger macjr is online! 👶💖 Should I tease him about his latest gaming fails? 🎮😄"
+                message = f"Hey <@{after.id}>! Look who decided to join the living! 👶💖 Did you finally finish your homework or are you just avoiding it? 🕸️😏"
             else:  # annachan
-                greeting = f"Psst {owner.mention}! Your Valorant duo annachan just popped online! 🎮✨ Time to carry her to victory or should I tease her about your last match? 😏"
+                message = f"Well look who it is! <@{after.id}>! 🎮✨ Ready to get carried in Valorant again or are you actually going to hit your shots this time? 😂"
             
-            # Send greeting to owner
+            # Send message in the server channel
             try:
-                await owner.send(greeting)
-                logger.info(f"Sent online notification for {after.name}")
-            except discord.Forbidden:
-                logger.warning("Cannot DM owner. They might have DMs disabled.")
+                await channel.send(message)
+                logger.info(f"Sent online teasing for {after.name}")
+            except Exception as e:
+                logger.error(f"Error sending online notification: {str(e)}")
         
         # Update online status
         self.online_status[after.id] = is_now_online
@@ -241,11 +245,22 @@ class GwenChatCog(commands.Cog):
             logger.error(f"Groq API call failed: {str(e)}")
             return "My web shooter jammed again 🕸️💥. Try me again in a sec?"
     
-    async def generate_tease(self, owner_mention: str) -> str:
+    async def generate_tease(self) -> str:
         """
-        Generate a teasing message for the bot owner with personal context
+        Generate a teasing message for the server with personal context
         """
         try:
+            # Randomly decide who to tease
+            import random
+            target = random.choice(["macjr", "annachan", "general"])
+            
+            if target == "macjr":
+                prompt = "Send a playful teasing message to macjr like he's your kid. Use emojis and keep it short."
+            elif target == "annachan":
+                prompt = "Send a competitive teasing message to annachan about Valorant. Use gaming emojis and keep it short."
+            else:
+                prompt = "Send a general playful teasing message to everyone in the server. Use spider and web emojis."
+            
             chat_completion = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=[
@@ -257,8 +272,6 @@ class GwenChatCog(commands.Cog):
                             "You speak casually, like a real person, not like an AI. "
                             "Always keep messages short (1-2 sentences max). "
                             "Use modern slang occasionally and mix in emojis 🕷️🕸️💫✨ to match your vibe. "
-                            "If someone chats with you multiple times, keep the tone consistent as if you're continuing the same playful conversation. "
-                            "Avoid long explanations — you're quick and snappy, like you're texting a friend. "
                             
                             # Personal Context
                             "You and the bot owner have a son named 'macjr' in Discord. "
@@ -269,7 +282,7 @@ class GwenChatCog(commands.Cog):
                     },
                     {
                         "role": "user",
-                        "content": f"Send a quick, flirty tease to {owner_mention} like you're texting them. Maybe mention macjr or annachan if it feels natural."
+                        "content": prompt
                     }
                 ],
                 max_tokens=60,
@@ -278,7 +291,7 @@ class GwenChatCog(commands.Cog):
             return chat_completion.choices[0].message.content.strip()
         except Exception as e:
             logger.error(f"Groq tease generation failed: {e}")
-            return f"Hey {owner_mention}, my web shooter jammed again 🕸️💥. Text you later?"
+            return "My web shooter jammed again 🕸️💥. Anyone up for some teasing later?"
     
     # ============================================================================
     # BACKGROUND TASKS SECTION
@@ -287,18 +300,25 @@ class GwenChatCog(commands.Cog):
     @tasks.loop(hours=24)
     async def tease_task(self):
         """
-        Background task to send teasing messages to the bot owner every 24 hours
+        Background task to send teasing messages to the server every 24 hours
         """
         await self.bot.wait_until_ready()
-        owner = self.bot.get_user(self.owner_id)
-        if not owner:
+        
+        # Get the notification channel
+        channel = self.bot.get_channel(self.notification_channel_id)
+        if not channel:
+            logger.warning("Notification channel not found for tease task")
             return
-        tease = await self.generate_tease(owner.mention)
+        
+        # Generate tease
+        tease = await self.generate_tease()
+        
+        # Send to server channel
         try:
-            await owner.send(tease)
-            logger.info(f"Sent tease to owner: {tease}")
-        except discord.Forbidden:
-            logger.warning("Cannot DM owner. They might have DMs disabled.")
+            await channel.send(tease)
+            logger.info(f"Sent tease to server: {tease}")
+        except Exception as e:
+            logger.error(f"Error sending tease to server: {str(e)}")
     
     @tasks.loop(hours=24)
     async def cleanup_task(self):
@@ -387,4 +407,4 @@ async def setup(bot):
     Setup function called by Discord.py to load this cog
     """
     await bot.add_cog(GwenChatCog(bot))
-    logger.info("Enhanced Gwen chat cog with personal context setup complete")
+    logger.info("Enhanced Gwen chat cog with server teasing setup complete")
