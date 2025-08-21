@@ -193,6 +193,8 @@ class GwenChatCog(commands.Cog):
     # AI RESPONSE GENERATION SECTION
     # ============================================================================
     
+    # Inside GwenChatCog
+
     async def generate_gwen_response(self, message: str, history: list = None) -> str:
         """
         Generate a response from Gwen Stacy using Groq AI with personal context
@@ -208,8 +210,7 @@ class GwenChatCog(commands.Cog):
                         "You speak casually, like a real person, not like an AI. "
                         "Always keep messages short (1-2 sentences max). "
                         "Use modern slang occasionally and mix in emojis 🕷️🕸️💫✨ to match your vibe. "
-                        "If someone chats with you multiple times, keep the tone consistent as if you're continuing the same playful conversation. "
-                        "Avoid long explanations — you're quick and snappy, like you're texting a friend. "
+                        "Avoid long explanations — you're quick and snappy. "
                         
                         # Personal Context
                         "You and the bot owner have a son named 'macjr' in Discord. "
@@ -219,41 +220,60 @@ class GwenChatCog(commands.Cog):
                     )
                 }
             ]
-            
+
             if history:
                 messages.extend(history)
-            
+
             messages.append({"role": "user", "content": message})
-            
+
             serializable_messages = []
             for msg in messages:
                 serializable_messages.append({
                     "role": msg["role"],
                     "content": str(msg["content"])
                 })
-            
-            chat_completion = self.client.chat.completions.create(
+
+                chat_completion = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=serializable_messages,
                 max_tokens=80,
                 temperature=0.75
             )
-            
-            return chat_completion.choices[0].message.content.strip()
-            
+            response = chat_completion.choices[0].message.content.strip()
+
+            # 🔹 If macjr is offline, remove all mentions/references
+            if not self.online_status.get(self.macjr_id, False):
+                response = response.replace(f"<@{self.macjr_id}>", "")
+                response = response.replace("macjr", "")
+
+            # 🔹 If annachan is offline, remove all mentions/references
+            if not self.online_status.get(self.annachan_id, False):
+                response = response.replace(f"<@{self.annachan_id}>", "")
+                response = response.replace("annachan", "")
+
+            # Clean up double spaces left from removals
+            response = " ".join(response.split())
+
+            return response
+
         except Exception as e:
             logger.error(f"Groq API call failed: {str(e)}")
             return "My web shooter jammed again 🕸️💥. Try me again in a sec?"
+
     
     async def generate_tease(self) -> str:
-        """
-        Generate a teasing message for the server with personal context
-        """
         try:
-            # Randomly decide who to tease
             import random
-            target = random.choice(["macjr", "annachan", "general"])
-            
+
+            # Build eligible targets based on who’s online
+            possible_targets = ["general"]
+            if self.online_status.get(self.macjr_id, False):
+                possible_targets.append("macjr")
+            if self.online_status.get(self.annachan_id, False):
+                possible_targets.append("annachan")
+
+            target = random.choice(possible_targets)
+
             if target == "macjr":
                 prompt = "Send a playful teasing message to macjr like he's your kid. Use emojis and keep it short."
             elif target == "annachan":
@@ -269,29 +289,24 @@ class GwenChatCog(commands.Cog):
                         "content": (
                             "You are Gwen Stacy from Spider-Verse. "
                             "You are witty, teasing, playful, with a touch of flirty banter. "
-                            "You speak casually, like a real person, not like an AI. "
-                            "Always keep messages short (1-2 sentences max). "
-                            "Use modern slang occasionally and mix in emojis 🕷️🕸️💫✨ to match your vibe. "
-                            
-                            # Personal Context
-                            "You and the bot owner have a son named 'macjr' in Discord. "
-                            "Whenever 'macjr' is mentioned, treat him playfully like your kid. 👶💖 "
-                            "The owner's Valorant duo is 'annachan' — tease about her sometimes, "
-                            "especially in a competitive/fun context 🎮✨. "
+                            "Keep it short, fun, with emojis. "
+                            "Only mention macjr or annachan if they're specifically in the prompt. "
                         )
                     },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "user", "content": prompt}
                 ],
                 max_tokens=60,
                 temperature=0.8
             )
-            return chat_completion.choices[0].message.content.strip()
+            tease = chat_completion.choices[0].message.content.strip()
+
+            return tease
+
         except Exception as e:
             logger.error(f"Groq tease generation failed: {e}")
             return "My web shooter jammed again 🕸️💥. Anyone up for some teasing later?"
+
+
     
     # ============================================================================
     # BACKGROUND TASKS SECTION
