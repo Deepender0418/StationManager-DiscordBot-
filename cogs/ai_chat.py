@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """
-Gwen Chat Cog - AI-Powered Gwen Stacy Character Chat System
+Enhanced Gwen Chat Cog - AI-Powered Gwen Stacy Character Chat System
 
-This cog provides an interactive chat experience with Gwen Stacy from Spider-Verse,
-featuring:
-- Natural language conversations using Groq AI
-- Persistent conversation history with MongoDB
-- Continuous conversation tracking across restarts
-- Teasing task for owner interactions
-- Mention-based and command-based interaction modes
-
-The cog maintains conversation context and personality consistency while providing
-short, playful responses with emojis in Gwen's characteristic style.
+This enhanced version adds:
+- Direct message support without requiring mentions
+- 24-hour teasing interval instead of 30 minutes
+- Improved DM detection and handling
 """
 
 import os
@@ -29,13 +23,13 @@ logger = logging.getLogger(__name__)
 
 class GwenChatCog(commands.Cog):
     """
-    Gwen Stacy chat cog that provides AI-powered conversational interactions
+    Enhanced Gwen Stacy chat cog with DM support and 24-hour teasing
     
     This cog provides:
     - Character-accurate Gwen Stacy personality with witty, playful responses
     - MongoDB-backed conversation history for continuity across restarts
-    - Automatic teasing messages to the bot owner
-    - Multiple interaction methods (commands, mentions, DMs)
+    - Automatic teasing messages to the bot owner every 24 hours
+    - Multiple interaction methods (commands, mentions, DMs without mentions)
     - Short, emoji-filled responses in Gwen's signature style
     """
     
@@ -59,7 +53,7 @@ class GwenChatCog(commands.Cog):
         self.tease_task.start()
         self.cleanup_task.start()
         
-        logger.info("Gwen chat cog initialized")
+        logger.info("Enhanced Gwen chat cog initialized")
     
     def cog_unload(self):
         """
@@ -73,12 +67,12 @@ class GwenChatCog(commands.Cog):
         self.tease_task.cancel()
         self.cleanup_task.cancel()
         self.mongo_client.close()
-        logger.info("Gwen chat cog unloaded")
+        logger.info("Enhanced Gwen chat cog unloaded")
     
     @commands.Cog.listener()
     async def on_ready(self):
         """Called when the cog is ready and loaded"""
-        logger.info("Gwen chat cog ready")
+        logger.info("Enhanced Gwen chat cog ready")
     
     # ============================================================================
     # DATABASE MANAGEMENT SECTION
@@ -100,6 +94,7 @@ class GwenChatCog(commands.Cog):
             list: Conversation history or empty list
         """
         try:
+            # Use channel ID for guild messages, user ID for DMs
             key = ctx.channel.id if ctx.guild else ctx.author.id
             doc = self.conversations.find_one({"_id": key})
             if doc and "history" in doc:
@@ -127,6 +122,7 @@ class GwenChatCog(commands.Cog):
             bot_response: Gwen's response content
         """
         try:
+            # Use channel ID for guild messages, user ID for DMs
             key = ctx.channel.id if ctx.guild else ctx.author.id
             max_history = 6  # Keep last 6 exchanges
             
@@ -278,10 +274,10 @@ class GwenChatCog(commands.Cog):
     # BACKGROUND TASKS SECTION
     # ============================================================================
     
-    @tasks.loop(minutes=30)
+    @tasks.loop(hours=24)  # Changed from minutes=30 to hours=24
     async def tease_task(self):
         """
-        Background task to send teasing messages to the bot owner
+        Background task to send teasing messages to the bot owner every 24 hours
         
         This task:
         1. Waits until the bot is ready
@@ -359,13 +355,14 @@ class GwenChatCog(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """
-        Handle message events for mention-based interactions
+        Handle message events for mention-based and DM-based interactions
         
-        This listener:
+        This enhanced listener:
         1. Ignores messages from bots
-        2. Responds when the bot is mentioned
-        3. Maintains conversation history
-        4. Handles errors gracefully
+        2. Responds when the bot is mentioned in guild channels
+        3. Responds to all messages in DMs (without requiring mentions)
+        4. Maintains conversation history
+        5. Handles errors gracefully
         
         Args:
             message: The Discord message object
@@ -373,8 +370,36 @@ class GwenChatCog(commands.Cog):
         if message.author.bot:
             return
 
-        # If bot is mentioned in the message
-        if self.bot.user.mentioned_in(message):
+        # Handle DMs (without requiring mentions)
+        if isinstance(message.channel, discord.DMChannel) and message.author != self.bot.user:
+            try:
+                # Use the entire message content in DMs
+                user_input = message.content.strip()
+                if not user_input:
+                    return  # Ignore empty messages
+                
+                # Create context for history tracking
+                ctx = await self.bot.get_context(message)
+                
+                # Get conversation history
+                history = await self.get_conversation_history(ctx)
+                
+                # Generate response
+                response = await self.generate_gwen_response(user_input, history)
+                
+                # Update conversation history
+                await self.update_conversation_history(ctx, user_input, response)
+                
+                # Send response
+                await message.channel.send(response)
+                logger.info(f"Gwen DM response sent: {response}")
+                
+            except Exception as e:
+                await message.channel.send("Oops, my web got tangled again 🕸️💫. Try me again in a sec?")
+                logger.error(f"Error handling DM: {str(e)}")
+        
+        # Handle mentions in guild channels
+        elif message.guild and self.bot.user.mentioned_in(message):
             try:
                 # Extract user input from mention
                 user_input = message.content.replace(f"<@{self.bot.user.id}>", "").strip()
@@ -398,7 +423,7 @@ class GwenChatCog(commands.Cog):
                 logger.info(f"Gwen mention response sent: {response}")
                 
             except Exception as e:
-                await message.channel.send("Oops, my web got tangled again 🕸️💫. DM me instead?")
+                await message.channel.send("Oops, my web got tangled again 🕸️💫. Try me again in a sec?")
                 logger.error(f"Error handling mention: {str(e)}")
 
 # ============================================================================
@@ -418,4 +443,4 @@ async def setup(bot):
         bot: The Discord bot instance
     """
     await bot.add_cog(GwenChatCog(bot))
-    logger.info("Gwen chat cog setup complete")
+    logger.info("Enhanced Gwen chat cog setup complete")
