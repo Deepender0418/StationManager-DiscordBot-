@@ -276,7 +276,7 @@ def create_bot():
         try:
             activity = discord.Activity(
                 type=discord.ActivityType.playing,
-                name="Self-love, he don't love himself, tryna love me"
+                name="🎵 Self-love, he don't love himself, tryna love me"
             )
             await bot.change_presence(activity=activity)
             logger.info("🎵 Custom status set successfully")
@@ -629,3 +629,4 @@ async def load_cogs(bot):
     
     if loaded_cogs < total_cogs:
         logger.warning(f'⚠️ {total_cogs - loaded_cogs} cog(s) failed to load')
+
