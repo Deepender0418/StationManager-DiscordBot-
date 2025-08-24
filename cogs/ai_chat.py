@@ -638,29 +638,28 @@ class AIChatCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error handling joke request: {str(e)}")
             return "Oops! My joke generator is glitching rn! 🕷️💫 As if I needed another thing to malfunction today! 💕"
-    
-    async def handle_preferences_request(self, user_id: int, guild_id: int) -> str:
-        """Handle preferences requests"""
-        try:
-            preferences = await self.get_user_preferences(user_id, guild_id)
-            
-            if preferences:
-                # Create a summary of preferences
-                top_prefs = preferences[:3]
-                pref_summary = []
+        
+        async def handle_preferences_request(self, user_id: int, guild_id: int) -> str:
+            """Handle preferences requests"""
+            try:
+                preferences = await self.get_user_preferences(user_id, guild_id)
                 
-                for pref in top_prefs:
-                    sentiment_emoji = "❤️" if pref["sentiment"] == "love" else "👍" if pref["sentiment"] == "like" else "😐"
-                    pref_summary.append(f"{sentiment_emoji} {pref['topic']}")
-                
-                return f"Fr fr I remember so much about you! 💕 Here's what I know: {', '.join(pref_summary)}... You're literally one of my favorite people to talk to! ✨ Oh honey, you're really making me work my memory muscles rn! As if I don't have enough to remember already! 🕷️💫"
-            else:
-                return "I'm still learning about you bestie! 💕 Let's chat more so I can get to know your preferences better! 🕷️✨ Bestie please, you're really testing my patience with all these questions! 😅"
-                
-        except Exception as e:
-            logger.error(f"Error handling preferences request: {str(e)}")
-            return "Oh no! My memory is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
-    
+                if preferences:
+                    # Create a summary of preferences
+                    top_prefs = preferences[:3]
+                    pref_summary = []
+                    
+                    for pref in top_prefs:
+                        sentiment_emoji = "❤️" if pref["sentiment"] == "love" else "👍" if pref["sentiment"] == "like" else "😐"
+                        pref_summary.append(f"{sentiment_emoji} {pref['topic']}")
+                    
+                    return f"Fr fr I remember so much about you! 💕 Here's what I know: {', '.join(pref_summary)}... You're literally one of my favorite people to talk to! ✨ Oh honey, you're really making me work my memory muscles rn! As if I don't have enough to remember already! 🕷️💫"
+                else:
+                    return "I'm still learning about you bestie! 💕 Let's chat more so I can get to know your preferences better! 🕷️✨ Bestie please, you're really testing my patience with all these questions! 😅"
+                    
+            except Exception as e:
+                logger.error(f"Error handling preferences request: {str(e)}")
+                return "Oh no! My memory is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
     async def handle_relationship_request(self, user_id: int, guild_id: int) -> str:
         """Handle relationship requests"""
         try:
