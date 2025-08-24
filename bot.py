@@ -272,6 +272,17 @@ def create_bot():
         logger.info(f"🤖 Bot is ready! Logged in as {bot.user}")
         logger.info(f"📊 Connected to {len(bot.guilds)} guilds")
         
+        # Set custom bot status
+        try:
+            activity = discord.Activity(
+                type=discord.ActivityType.playing,
+                name="Self-love, he don't love himself, tryna love me"
+            )
+            await bot.change_presence(activity=activity)
+            logger.info("🎵 Custom status set successfully")
+        except Exception as e:
+            logger.warning(f"Could not set custom status: {str(e)}")
+        
         # Load all cogs (feature modules)
         await load_cogs(bot)
         
