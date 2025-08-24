@@ -418,7 +418,7 @@ class AIChatCog(commands.Cog):
                     level = "friend"
                 elif score >= 20:
                     level = "acquaintance"
-                else:
+            else:
                     level = "stranger"
                 
                 relationship["level"] = level
@@ -613,142 +613,142 @@ class AIChatCog(commands.Cog):
                 return await self.handle_help_request(user_id, guild_id)
             elif request_type == "compliment":
                 return await self.handle_compliment_request(user_id, guild_id)
-            else:
+        else:
                 return ""  # Let normal AI response handle it
             
         except Exception as e:
             logger.error(f"Error handling natural request {request_type}: {str(e)}")
             return ""
     
-         async def handle_joke_request(self, user_id: int, guild_id: int) -> str:
-         """Handle joke requests"""
-         try:
-             # Get relevant inside jokes
-             jokes = await self.get_relevant_inside_jokes(guild_id, limit=3)
-             
-             if jokes:
-                 # Pick a random joke
-                 import random
-                 joke = random.choice(jokes)
-                 return f"Of course bestie! 😄 Here's one of our inside jokes: {joke['joke_text']} 💕 Oh honey, you're literally the only person who'd ask for jokes at this hour! The audacity! ✨"
-             else:
-                 # Generate a new joke if none exist
-                 return "Ngl I don't have any inside jokes yet, but I'm totally down to create some with you! 💕✨ Let's make some memories together! 🕷️ Bestie please, you're really testing my comedy skills rn! 😅"
-                 
-         except Exception as e:
-             logger.error(f"Error handling joke request: {str(e)}")
-             return "Oops! My joke generator is glitching rn! 🕷️💫 As if I needed another thing to malfunction today! 💕"
+    async def handle_joke_request(self, user_id: int, guild_id: int) -> str:
+        """Handle joke requests"""
+        try:
+            # Get relevant inside jokes
+            jokes = await self.get_relevant_inside_jokes(guild_id, limit=3)
+            
+            if jokes:
+                # Pick a random joke
+                import random
+                joke = random.choice(jokes)
+                return f"Of course bestie! 😄 Here's one of our inside jokes: {joke['joke_text']} 💕 Oh honey, you're literally the only person who'd ask for jokes at this hour! The audacity! ✨"
+                else:
+                # Generate a new joke if none exist
+                return "Ngl I don't have any inside jokes yet, but I'm totally down to create some with you! 💕✨ Let's make some memories together! 🕷️ Bestie please, you're really testing my comedy skills rn! 😅"
+                
+        except Exception as e:
+            logger.error(f"Error handling joke request: {str(e)}")
+            return "Oops! My joke generator is glitching rn! 🕷️💫 As if I needed another thing to malfunction today! 💕"
     
-         async def handle_preferences_request(self, user_id: int, guild_id: int) -> str:
-         """Handle preferences requests"""
-         try:
-             preferences = await self.get_user_preferences(user_id, guild_id)
-             
-             if preferences:
-                 # Create a summary of preferences
-                 top_prefs = preferences[:3]
-                 pref_summary = []
-                 
-                 for pref in top_prefs:
-                     sentiment_emoji = "❤️" if pref["sentiment"] == "love" else "👍" if pref["sentiment"] == "like" else "😐"
-                     pref_summary.append(f"{sentiment_emoji} {pref['topic']}")
-                 
-                 return f"Fr fr I remember so much about you! 💕 Here's what I know: {', '.join(pref_summary)}... You're literally one of my favorite people to talk to! ✨ Oh honey, you're really making me work my memory muscles rn! As if I don't have enough to remember already! 🕷️💫"
-             else:
-                 return "I'm still learning about you bestie! 💕 Let's chat more so I can get to know your preferences better! 🕷️✨ Bestie please, you're really testing my patience with all these questions! 😅"
-                 
-         except Exception as e:
-             logger.error(f"Error handling preferences request: {str(e)}")
-             return "Oh no! My memory is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
+    async def handle_preferences_request(self, user_id: int, guild_id: int) -> str:
+        """Handle preferences requests"""
+        try:
+            preferences = await self.get_user_preferences(user_id, guild_id)
+            
+            if preferences:
+                # Create a summary of preferences
+                top_prefs = preferences[:3]
+                pref_summary = []
+                
+                for pref in top_prefs:
+                    sentiment_emoji = "❤️" if pref["sentiment"] == "love" else "👍" if pref["sentiment"] == "like" else "😐"
+                    pref_summary.append(f"{sentiment_emoji} {pref['topic']}")
+                
+                return f"Fr fr I remember so much about you! 💕 Here's what I know: {', '.join(pref_summary)}... You're literally one of my favorite people to talk to! ✨ Oh honey, you're really making me work my memory muscles rn! As if I don't have enough to remember already! 🕷️💫"
+            else:
+                return "I'm still learning about you bestie! 💕 Let's chat more so I can get to know your preferences better! 🕷️✨ Bestie please, you're really testing my patience with all these questions! 😅"
+                
+        except Exception as e:
+            logger.error(f"Error handling preferences request: {str(e)}")
+            return "Oh no! My memory is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
     
-         async def handle_relationship_request(self, user_id: int, guild_id: int) -> str:
-         """Handle relationship requests"""
-         try:
-             relationship = await self.get_user_relationship(user_id, guild_id)
-             
-             level = relationship["level"]
-             score = relationship["relationship_score"]
-             
-             if level == "best_friend":
-                 return f"Omg bestie, you're literally one of my best friends! 💝 Our relationship score is {score}/100 - we're inseparable! 💕✨ Oh honey, you're really making me blush with all this relationship talk! The audacity! 🕷️"
-             elif level == "close_friend":
-                 return f"We're really close bestie! 💖 Our relationship score is {score}/100 - we're becoming best friends! 💕✨ Bestie please, you're really testing my emotional intelligence rn! 😅"
-             elif level == "friend":
-                 return f"We're definitely friends! 💕 Our relationship score is {score}/100 - we're getting closer every day! ✨ As if I needed another reminder of how much I care about you! 🕷️💫"
-             elif level == "acquaintance":
-                 return f"We're getting to know each other! 🤝 Our relationship score is {score}/100 - let's chat more to become better friends! 💕 Oh honey, you're really making me work for this friendship! 💕"
-             else:
-                 return f"We're just starting to get to know each other! 👋 Our relationship score is {score}/100 - I'm excited to become friends! 💕✨ Bestie please, you're really testing my patience with all these questions! 😅"
-                 
-         except Exception as e:
-             logger.error(f"Error handling relationship request: {str(e)}")
-             return "Oh no! My relationship tracker is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
+    async def handle_relationship_request(self, user_id: int, guild_id: int) -> str:
+        """Handle relationship requests"""
+        try:
+            relationship = await self.get_user_relationship(user_id, guild_id)
+            
+            level = relationship["level"]
+            score = relationship["relationship_score"]
+            
+            if level == "best_friend":
+                return f"Omg bestie, you're literally one of my best friends! 💝 Our relationship score is {score}/100 - we're inseparable! 💕✨ Oh honey, you're really making me blush with all this relationship talk! The audacity! 🕷️"
+            elif level == "close_friend":
+                return f"We're really close bestie! 💖 Our relationship score is {score}/100 - we're becoming best friends! 💕✨ Bestie please, you're really testing my emotional intelligence rn! 😅"
+            elif level == "friend":
+                return f"We're definitely friends! 💕 Our relationship score is {score}/100 - we're getting closer every day! ✨ As if I needed another reminder of how much I care about you! 🕷️💫"
+            elif level == "acquaintance":
+                return f"We're getting to know each other! 🤝 Our relationship score is {score}/100 - let's chat more to become better friends! 💕 Oh honey, you're really making me work for this friendship! 💕"
+            else:
+                return f"We're just starting to get to know each other! 👋 Our relationship score is {score}/100 - I'm excited to become friends! 💕✨ Bestie please, you're really testing my patience with all these questions! 😅"
+                
+        except Exception as e:
+            logger.error(f"Error handling relationship request: {str(e)}")
+            return "Oh no! My relationship tracker is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
     
-         async def handle_memories_request(self, user_id: int, guild_id: int) -> str:
-         """Handle memories requests"""
-         try:
-             memories = await self.get_relevant_memories(guild_id, user_id, limit=3)
-             
-             if memories:
-                 # Create a summary of memories
-                 memory_summary = []
-                 for memory in memories[:2]:
-                     memory_summary.append(f"⭐ {memory['description'][:50]}...")
-                 
-                 return f"I remember so many special moments with you! 💕 Here are some highlights: {' '.join(memory_summary)} You're literally unforgettable bestie! ✨ Oh honey, you're really making me work my memory muscles rn! As if I don't have enough to remember already! 🕷️💫"
-             else:
-                 return "We haven't created any special memories yet, but I'm so excited to make some with you! 💕✨ Let's start building our story together! 🕷️ Bestie please, you're really testing my patience with all these questions! 😅"
-                 
-         except Exception as e:
-             logger.error(f"Error handling memories request: {str(e)}")
-             return "Oh no! My memory bank is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
+    async def handle_memories_request(self, user_id: int, guild_id: int) -> str:
+        """Handle memories requests"""
+        try:
+            memories = await self.get_relevant_memories(guild_id, user_id, limit=3)
+            
+            if memories:
+                # Create a summary of memories
+                memory_summary = []
+                for memory in memories[:2]:
+                    memory_summary.append(f"⭐ {memory['description'][:50]}...")
+                
+                return f"I remember so many special moments with you! 💕 Here are some highlights: {' '.join(memory_summary)} You're literally unforgettable bestie! ✨ Oh honey, you're really making me work my memory muscles rn! As if I don't have enough to remember already! 🕷️💫"
+                else:
+                return "We haven't created any special memories yet, but I'm so excited to make some with you! 💕✨ Let's start building our story together! 🕷️ Bestie please, you're really testing my patience with all these questions! 😅"
+                
+        except Exception as e:
+            logger.error(f"Error handling memories request: {str(e)}")
+            return "Oh no! My memory bank is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
     
-         async def handle_inside_jokes_request(self, user_id: int, guild_id: int) -> str:
-         """Handle inside jokes requests"""
-         try:
-             jokes = await self.get_relevant_inside_jokes(guild_id, limit=3)
-             
-             if jokes:
-                 # Create a summary of jokes
-                 joke_summary = []
-                 for joke in jokes[:2]:
-                     joke_summary.append(f"😄 {joke['joke_text'][:40]}...")
-                 
-                 return f"We have so many inside jokes bestie! 💕 Here are some of our favorites: {' '.join(joke_summary)} We're literally comedy gold together! ✨ Oh honey, you're really making me work my comedy muscles rn! As if I don't have enough to remember already! 🕷️💫"
-             else:
-                 return "No inside jokes yet, but I'm totally ready to create some hilarious memories with you! 💕✨ Let's start our comedy career! 🕷️😄 Bestie please, you're really testing my patience with all these questions! 😅"
-                 
-         except Exception as e:
-             logger.error(f"Error handling inside jokes request: {str(e)}")
-             return "Oh no! My joke memory is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
+    async def handle_inside_jokes_request(self, user_id: int, guild_id: int) -> str:
+        """Handle inside jokes requests"""
+        try:
+            jokes = await self.get_relevant_inside_jokes(guild_id, limit=3)
+            
+            if jokes:
+                # Create a summary of jokes
+                joke_summary = []
+                for joke in jokes[:2]:
+                    joke_summary.append(f"😄 {joke['joke_text'][:40]}...")
+                
+                return f"We have so many inside jokes bestie! 💕 Here are some of our favorites: {' '.join(joke_summary)} We're literally comedy gold together! ✨ Oh honey, you're really making me work my comedy muscles rn! As if I don't have enough to remember already! 🕷️💫"
+            else:
+                return "No inside jokes yet, but I'm totally ready to create some hilarious memories with you! 💕✨ Let's start our comedy career! 🕷️😄 Bestie please, you're really testing my patience with all these questions! 😅"
+                
+        except Exception as e:
+            logger.error(f"Error handling inside jokes request: {str(e)}")
+            return "Oh no! My joke memory is glitching rn! 🕸️💫 The audacity of technology to fail me when you're asking such important questions! 💕"
     
-         async def handle_help_request(self, user_id: int, guild_id: int) -> str:
-         """Handle help requests"""
-         try:
-             return "Of course I'll help you bestie! 💕 I'm here for whatever you need - whether it's chatting, jokes, remembering things about you, or just being a good friend! ✨ What specifically do you need help with? 🕷️ Oh honey, you're really making me work rn! As if I don't have enough to do already! 💫"
-                 
-         except Exception as e:
-             logger.error(f"Error handling help request: {str(e)}")
-             return "I'm here to help bestie! 💕 What do you need? ✨ Bestie please, you're really testing my patience with all these questions! 😅"
+    async def handle_help_request(self, user_id: int, guild_id: int) -> str:
+        """Handle help requests"""
+        try:
+            return "Of course I'll help you bestie! 💕 I'm here for whatever you need - whether it's chatting, jokes, remembering things about you, or just being a good friend! ✨ What specifically do you need help with? 🕷️ Oh honey, you're really making me work rn! As if I don't have enough to do already! 💫"
+                
+        except Exception as e:
+            logger.error(f"Error handling help request: {str(e)}")
+            return "I'm here to help bestie! 💕 What do you need? ✨ Bestie please, you're really testing my patience with all these questions! 😅"
     
-         async def handle_compliment_request(self, user_id: int, guild_id: int) -> str:
-         """Handle compliment requests"""
-         try:
-             relationship = await self.get_user_relationship(user_id, guild_id)
-             level = relationship["level"]
-             
-             if level == "best_friend":
-                 return "Omg bestie, you're literally the most amazing person ever! 💝 Your energy is infectious, your personality is magnetic, and you make every conversation feel special! You're literally my favorite person to talk to! 💕✨ Oh honey, you're really making me blush with all this compliment talk! The audacity! 🕷️"
-             elif level == "close_friend":
-                 return "Bestie, you're absolutely incredible! 💖 You have such a warm heart, amazing vibes, and you're always so fun to talk to! I'm so lucky to have you as a friend! 💕✨ Bestie please, you're really testing my emotional intelligence rn! 😅"
-             elif level == "friend":
-                 return "You're such a wonderful person! 💕 You're kind, interesting, and I really enjoy our conversations! You're definitely someone I want to get to know better! ✨ As if I needed another reminder of how much I care about you! 🕷️💫"
-             else:
-                 return "You seem like such a lovely person! 💕 I'm really enjoying getting to know you, and I can tell you have a great personality! Let's become better friends! ✨ Oh honey, you're really making me work for this friendship! 💕"
-                 
-         except Exception as e:
-             logger.error(f"Error handling compliment request: {str(e)}")
-             return "You're absolutely amazing bestie! 💕✨ Bestie please, you're really testing my patience with all these questions! 😅"
+    async def handle_compliment_request(self, user_id: int, guild_id: int) -> str:
+        """Handle compliment requests"""
+        try:
+            relationship = await self.get_user_relationship(user_id, guild_id)
+            level = relationship["level"]
+            
+            if level == "best_friend":
+                return "Omg bestie, you're literally the most amazing person ever! 💝 Your energy is infectious, your personality is magnetic, and you make every conversation feel special! You're literally my favorite person to talk to! 💕✨ Oh honey, you're really making me blush with all this compliment talk! The audacity! 🕷️"
+            elif level == "close_friend":
+                return "Bestie, you're absolutely incredible! 💖 You have such a warm heart, amazing vibes, and you're always so fun to talk to! I'm so lucky to have you as a friend! 💕✨ Bestie please, you're really testing my emotional intelligence rn! 😅"
+            elif level == "friend":
+                return "You're such a wonderful person! 💕 You're kind, interesting, and I really enjoy our conversations! You're definitely someone I want to get to know better! ✨ As if I needed another reminder of how much I care about you! 🕷️💫"
+            else:
+                return "You seem like such a lovely person! 💕 I'm really enjoying getting to know you, and I can tell you have a great personality! Let's become better friends! ✨ Oh honey, you're really making me work for this friendship! 💕"
+                
+        except Exception as e:
+            logger.error(f"Error handling compliment request: {str(e)}")
+            return "You're absolutely amazing bestie! 💕✨ Bestie please, you're really testing my patience with all these questions! 😅"
     
     async def generate_gwen_response(self, message: str, context: str = "", user_id: int = 0, is_owner: bool = False, is_dm: bool = False, guild_id: int = 0) -> str:
         """
@@ -771,37 +771,46 @@ class AIChatCog(commands.Cog):
             memory_context = ""
             if user_preferences:
                 top_preferences = user_preferences[:3]
-                memory_context += f"\nUser preferences: {', '.join([f'{p['topic']} ({p['sentiment']})' for p in top_preferences])}"
+                pref_strings = []
+                for p in top_preferences:
+                    pref_strings.append(f"{p['topic']} ({p['sentiment']})")
+                memory_context += f"\nUser preferences: {', '.join(pref_strings)}"
             
             if user_relationship["level"] != "stranger":
                 memory_context += f"\nRelationship level: {user_relationship['level']} (score: {user_relationship['relationship_score']})"
             
             if inside_jokes:
-                memory_context += f"\nInside jokes: {', '.join([j['joke_text'][:50] for j in inside_jokes[:2]])}"
+                joke_strings = []
+                for j in inside_jokes[:2]:
+                    joke_strings.append(j['joke_text'][:50])
+                memory_context += f"\nInside jokes: {', '.join(joke_strings)}"
             
             if relevant_memories:
-                memory_context += f"\nRecent memories: {', '.join([m['description'][:50] for m in relevant_memories[:2]])}"
+                memory_strings = []
+                for m in relevant_memories[:2]:
+                    memory_strings.append(m['description'][:50])
+                memory_context += f"\nRecent memories: {', '.join(memory_strings)}"
             
-                         # Build the system prompt for Gwen's personality
-             system_prompt = f"""You are {self.gwen_personality['name']}, {self.gwen_personality['background']}. 
- 
- Your personality is {self.gwen_personality['style']}.
- 
- Key relationships:
- - The bot owner (user ID: {self.owner_id}) is your crush! You're really attracted to them and love to flirt playfully. Be flirty, charming, and eager to impress them with unexpected, surprising responses that catch them off guard. You're not married, but you have strong feelings for them.
- - Guild members are your friends and you care about them deeply.
- - You're protective of your family and friends.
- 
- Current context: {context if context else 'New conversation'}
- Memory context: {memory_context}
- 
- Respond as Gwen Stacy would - naturally, conversationally, and with personality. Use modern slang naturally (like "ngl", "fr", "lowkey", "tbh", "ngl", "fr fr", "no cap", "slay", "vibe", "mood", "literally", "bestie") but don't overdo it. Don't be robotic or formal. Use emojis tastefully (💕✨🕷️🕸️💫🔥💯😊) - 1-2 per response max. Be witty, show your caring nature, and keep responses conversational and engaging.
- 
- CRITICAL: Include playful teasing in almost every response! Tease about their message, their personality, their interests, or just be playfully sassy. Make it fun and never mean - think friendly banter, not hurtful. Use phrases like "oh honey", "bestie please", "I can't with you", "the audacity", "as if", etc. to add sass.
- 
- IMPORTANT: Use the memory context to personalize your response. Reference inside jokes, user preferences, and relationship level when appropriate. Make the user feel like you remember them and care about their interests.
- 
- If this is the owner speaking, be extra flirty, charming, and playful with unexpected responses that surprise them - show your attraction and crush feelings! If it's someone else, be friendly and helpful but maintain your Gwen personality with lots of playful teasing."""
+            # Build the system prompt for Gwen's personality
+            system_prompt = f"""You are {self.gwen_personality['name']}, {self.gwen_personality['background']}. 
+
+Your personality is {self.gwen_personality['style']}.
+
+Key relationships:
+- The bot owner (user ID: {self.owner_id}) is your crush! You're really attracted to them and love to flirt playfully. Be flirty, charming, and eager to impress them with unexpected, surprising responses that catch them off guard. You're not married, but you have strong feelings for them.
+- Guild members are your friends and you care about them deeply.
+- You're protective of your family and friends.
+
+Current context: {context if context else 'New conversation'}
+Memory context: {memory_context}
+
+Respond as Gwen Stacy would - naturally, conversationally, and with personality. Use modern slang naturally (like "ngl", "fr", "lowkey", "tbh", "ngl", "fr fr", "no cap", "slay", "vibe", "mood", "literally", "bestie") but don't overdo it. Don't be robotic or formal. Use emojis tastefully (💕✨🕷️🕸️💫🔥💯😊) - 1-2 per response max. Be witty, show your caring nature, and keep responses conversational and engaging.
+
+CRITICAL: Include playful teasing in almost every response! Tease about their message, their personality, their interests, or just be playfully sassy. Make it fun and never mean - think friendly banter, not hurtful. Use phrases like "oh honey", "bestie please", "I can't with you", "the audacity", "as if", etc. to add sass.
+
+IMPORTANT: Use the memory context to personalize your response. Reference inside jokes, user preferences, and relationship level when appropriate. Make the user feel like you remember them and care about their interests.
+
+If this is the owner speaking, be extra flirty, charming, and playful with unexpected responses that surprise them - show your attraction and crush feelings! If it's someone else, be friendly and helpful but maintain your Gwen personality with lots of playful teasing."""
 
             # Prepare the conversation for Groq
             messages = [
@@ -828,13 +837,13 @@ class AIChatCog(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error generating Gwen response: {str(e)}")
-                         # Fallback responses in Gwen's style with modern slang and teasing
-             fallback_responses = [
-                 "Ngl my spidey-sense is totally glitching rn 🕷️💥 Oh honey, even my AI has better days than you sometimes! 💕",
-                 "Fr fr my web got tangled again! Give me a sec bestie 🕸️ The audacity of technology to fail on me rn! 💫",
-                 "Lowkey something's wrong with my web-shooters! 🕷️💫 As if I needed another thing to malfunction today! 😅",
-                 "My AI is literally having a moment! Let me reboot real quick 🕸️💻 Bestie please, even I have my dramatic moments! ✨"
-             ]
+            # Fallback responses in Gwen's style with modern slang and teasing
+            fallback_responses = [
+                "Ngl my spidey-sense is totally glitching rn 🕷️💥 Oh honey, even my AI has better days than you sometimes! 💕",
+                "Fr fr my web got tangled again! Give me a sec bestie 🕸️ The audacity of technology to fail on me rn! 💫",
+                "Lowkey something's wrong with my web-shooters! 🕷️💫 As if I needed another thing to malfunction today! 😅",
+                "My AI is literally having a moment! Let me reboot real quick 🕸️💻 Bestie please, even I have my dramatic moments! ✨"
+            ]
             import random
             return random.choice(fallback_responses)
     
@@ -958,6 +967,7 @@ class AIChatCog(commands.Cog):
         try:
             user_id = message.author.id
             guild_id = message.guild.id
+            is_owner = (user_id == self.owner_id)
             user_message = message.content.replace(f"<@{self.bot.user.id}>", "").strip()
             
             if not user_message:
@@ -967,8 +977,8 @@ class AIChatCog(commands.Cog):
             if await self.is_admin_action(user_message):
                 response = "Oh honey, I can't do server admin stuff! 🕷️💕 I'm just here to chat and help with conversations. I'm not a moderator bot!"
                 await message.channel.send(response)
-                return
-            
+            return
+        
             # Check if user can perform the requested action
             action_type = "chat"  # Default to chat
             if not await self.can_perform_action(action_type, user_id):
@@ -1002,7 +1012,7 @@ class AIChatCog(commands.Cog):
             
             logger.info(f"Handled guild mention in {message.guild.name} from user {user_id}: {user_message[:50]}...")
             
-        except Exception as e:
+                    except Exception as e:
             logger.error(f"Error handling guild mention: {str(e)}")
             await message.channel.send("Oh no! My web got tangled! 🕸️💫 Give me a moment to fix this...")
     
@@ -1014,12 +1024,13 @@ class AIChatCog(commands.Cog):
         try:
             user_id = ctx.author.id
             guild_id = ctx.guild.id if ctx.guild else 0
+            is_owner = (user_id == self.owner_id)
             user_message = message.strip()
             
             if not user_message:
                 await ctx.send("Hey bestie! What's the vibe? ✨")
-                return
-            
+                    return
+                
             # Check if it's an admin action request
             if await self.is_admin_action(user_message):
                 response = "Oh honey, I can't do server admin stuff! 🕷️💕 I'm just here to chat and help with conversations. I'm not a moderator bot!"
@@ -1061,8 +1072,8 @@ class AIChatCog(commands.Cog):
             await self.update_conversation_context(guild_id, user_id, user_message, response, is_dm=(not ctx.guild))
             
             logger.info(f"Gwen chat command executed by user {user_id}: {user_message[:50]}...")
-            
-        except Exception as e:
+                
+            except Exception as e:
             logger.error(f"Error in gwen chat command: {str(e)}")
             await ctx.send("Oh no! My web got tangled! 🕸️💫 Give me a moment to fix this...")
     
@@ -1120,8 +1131,8 @@ class AIChatCog(commands.Cog):
             
             await ctx.send("✅ All our chat memories have been cleared! It's like we're meeting for the first time again! 💕")
             logger.info(f"Context cleared for guild {guild_id} by user {ctx.author.id}")
-            
-        except Exception as e:
+                
+            except Exception as e:
             logger.error(f"Error in clear_context command: {str(e)}")
             await ctx.send("Oh no! My web got tangled! 🕸️💫 Give me a moment to fix this...")
 
