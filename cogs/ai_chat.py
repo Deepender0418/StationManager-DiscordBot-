@@ -38,7 +38,6 @@ CONFIG = {
     "groq_temperature": 0.8,
     "groq_top_p": 0.9,
     "max_input_length": 2000,  # Prevent overly long messages
-    "rate_limit_per_user": 5,  # Messages per minute
 }
 
 class AIChatCog(commands.Cog):
@@ -77,9 +76,6 @@ class AIChatCog(commands.Cog):
         self.inside_jokes = self.db["inside_jokes"]
         self.user_relationships = self.db["user_relationships"]
         self.memory_events = self.db["memory_events"]
-        
-        # Rate limiting
-        self.user_rate_limits = {}
         
         # Gwen Stacy personality settings
         self.gwen_personality = {
@@ -587,10 +583,10 @@ class AIChatCog(commands.Cog):
                 memory_context += f"\nRelationship level: {user_relationship['level']} (score: {user_relationship['relationship_score']})"
             if inside_jokes:
                 joke_strings = [j['joke_text'][:50] for j in inside_jokes[:2]]
-                memory_context += f"\nInside jokes: {', '.join(joke_strings)}"
+                memory_context += f"\nInside jokes: {'. '.join(joke_strings)}"
             if relevant_memories:
                 memory_strings = [m['description'][:50] for m in relevant_memories[:2]]
-                memory_context += f"\nRecent memories: {', '.join(memory_strings)}"
+                memory_context += f"\nRecent memories: {'. '.join(memory_strings)}"
             
             # System prompt
             system_prompt = f"""You are {self.gwen_personality['name']}, {self.gwen_personality['background']}. 
@@ -640,29 +636,10 @@ Respond as Gwen Stacy: natural, conversational, witty, caring, with playful teas
         ]
         return any(keyword in message.lower() for keyword in admin_keywords)
     
-    async def check_rate_limit(self, user_id: int) -> bool:
-        """Check if user is within rate limit"""
-        current_time = datetime.utcnow()
-        if user_id not in self.user_rate_limits:
-            self.user_rate_limits[user_id] = []
-        
-        # Remove old timestamps
-        self.user_rate_limits[user_id] = [t for t in self.user_rate_limits[user_id] if current_time - t < timedelta(minutes=1)]
-        
-        if len(self.user_rate_limits[user_id]) >= CONFIG["rate_limit_per_user"]:
-            return False
-        
-        self.user_rate_limits[user_id].append(current_time)
-        return True
-    
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """Handle all incoming messages"""
         if message.author.bot:
-            return
-        
-        if not await self.check_rate_limit(message.author.id):
-            await message.channel.send("Slow down, bestie! 🕷️💕 You're chatting too fast for my web to keep up!")
             return
         
         try:
@@ -759,10 +736,6 @@ Respond as Gwen Stacy: natural, conversational, witty, caring, with playful teas
             guild_id = ctx.guild.id if ctx.guild else 0
             is_owner = user_id == self.owner_id
             user_message = message.strip()[:CONFIG["max_input_length"]]
-            
-            if not await self.check_rate_limit(user_id):
-                await ctx.send("Slow down, bestie! 🕷️💕 You're chatting too fast for my web to keep up!")
-                return
             
             if not user_message:
                 await ctx.send("Hey bestie! What's the vibe? ✨")
