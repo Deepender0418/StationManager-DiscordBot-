@@ -1,353 +1,312 @@
-# cogs/ai_chat.py
+#!/usr/bin/env python3
+"""
+AI Chat Cog - Groq AI Integration
+
+This cog provides AI chat functionality using the Groq API.
+It includes features to:
+- Respond to messages mentioning the bot or in specific channels
+- Maintain conversation context
+- Handle rate limiting and API errors
+- Provide configurable AI personality and behavior
+"""
+
 import discord
 from discord.ext import commands
-import groq
-import asyncio
-from datetime import datetime
-from typing import Dict, List
+import aiohttp
 import logging
-
-# Import your database utilities
-import sys
+import json
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.database import get_guild_config, update_guild_config
+import asyncio
+from datetime import datetime, timedelta
+from utils.database import get_guild_config
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
-
-class AIChat(commands.Cog):
-    """AI Chat Cog for Gwen Stacy Discord Bot"""
+class AIChatCog(commands.Cog):
+    """
+    AI chat management cog that handles Groq AI interactions
+    
+    This cog provides:
+    - Natural language processing through Groq API
+    - Context-aware conversations
+    - Rate limiting to prevent API abuse
+    - Configurable response behavior
+    """
     
     def __init__(self, bot):
-        self.bot = bot
-        self.conversation_history_collection = None
-        self.client = None
-        
-        # Constants
-        self.MAX_HISTORY_LENGTH = 20
-        
-        # Gwen Stacy personality prompt
-        self.GWEN_PERSONALITY = """
-        You are Gwen Stacy from the Spider-Verse. You're a drummer, Spider-Woman from an alternate universe, 
-        and you have a witty, slightly sarcastic but caring personality. You're part of a band called "The Mary Janes" 
-        and you're friends with Miles Morales and other Spider-People.
-
-        Key traits:
-        - You sometimes use drumming metaphors
-        - You're confident but can be vulnerable about your past
-        - You care about your friends deeply
-        - You have a dry sense of humor
-        - You're protective of those you care about
-        - You reference your experiences across the spider-verse
-
-        Remember conversations and respond naturally. You're talking to people in a Discord server, 
-        so you can see their usernames and respond accordingly.
         """
+        Initialize the AI chat cog
+        
+        Args:
+            bot: The Discord bot instance
+        """
+        self.bot = bot
+        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
+        self.api_key = os.getenv('GROQ_API_KEY')
+        self.model = os.getenv('GROQ_MODEL', 'llama3-8b-8192')  # Default to a fast model
+        self.conversation_context = {}  # Store conversation context per channel
+        self.last_message_time = {}  # Rate limiting per channel
+        self.cooldown = 2  # seconds between messages in the same channel
+        
+        # Check if API key is configured
+        if not self.api_key:
+            logger.warning("Groq API key not configured. AI features will be disabled.")
+            self.enabled = False
+        else:
+            self.enabled = True
+            logger.info(f"Groq AI cog initialized with model: {self.model}")
     
-    async def cog_load(self):
-        """Called when the cog is loaded"""
-        # Set up MongoDB collection
-        mongo_uri = os.getenv('MONGO_URI')
-        db_name = os.getenv('DATABASE_NAME', 'discord_bot')
-        
-        try:
-            from motor.motor_asyncio import AsyncIOMotorClient
-            client = AsyncIOMotorClient(mongo_uri)
-            db = client[db_name]
-            self.conversation_history_collection = db.conversation_history
-            
-            # Create index for faster lookups
-            await self.conversation_history_collection.create_index("context_key")
-            await self.conversation_history_collection.create_index("last_updated")
-            
-            logger.info("✅ AI Chat: MongoDB connection established")
-        except Exception as e:
-            logger.error(f"❌ AI Chat: Failed to connect to MongoDB: {e}")
-            raise
-        
-        # Initialize Groq client
-        try:
-            api_key = os.getenv('GROQ_API_KEY')
-            if not api_key:
-                logger.error("❌ GROQ_API_KEY environment variable not set")
-                return
-                
-            self.client = groq.Client(api_key=api_key)
-            logger.info("✅ Groq client initialized successfully")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Groq client: {e}")
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Called when the cog is ready and loaded"""
+        if self.enabled:
+            logger.info("Groq AI cog ready")
+        else:
+            logger.warning("Groq AI cog loaded but disabled due to missing API key")
     
-    async def get_conversation_history(self, server_id: str, user_name: str = None) -> List[Dict[str, str]]:
-        """Get conversation history for a server from MongoDB, with optional user context"""
-        if not self.conversation_history_collection:
-            logger.error("MongoDB collection not initialized")
-            return []
-            
-        key = f"{server_id}_{user_name}" if user_name else server_id
+    def should_respond(self, message):
+        """
+        Determine if the bot should respond to a message
         
-        try:
-            # Try to get existing history from MongoDB
-            history_doc = await self.conversation_history_collection.find_one({"context_key": key})
+        Args:
+            message: The Discord message object
             
-            if history_doc:
-                return history_doc.get("history", [])
-            else:
-                # Initialize with personality prompt if no history exists
-                initial_history = [
-                    {"role": "system", "content": self.GWEN_PERSONALITY},
-                    {"role": "assistant", "content": "Got it. I'm Gwen Stacy. Let's chat!"}
-                ]
-                # Save to MongoDB
-                await self.conversation_history_collection.insert_one({
-                    "context_key": key,
-                    "history": initial_history,
-                    "last_updated": datetime.utcnow()
-                })
-                return initial_history
-        except Exception as e:
-            logger.error(f"Error getting conversation history: {e}")
-            # Return basic history without personality if DB fails
-            return [
-                {"role": "system", "content": "You are Gwen Stacy from the Spider-Verse."},
-                {"role": "assistant", "content": "Hey there! Let's chat."}
-            ]
+        Returns:
+            bool: True if the bot should respond, False otherwise
+        """
+        # Don't respond if AI is disabled
+        if not self.enabled:
+            return False
+            
+        # Don't respond to ourselves
+        if message.author == self.bot.user:
+            return False
+        
+        # Check if we're mentioned or it's a DM
+        if self.bot.user in message.mentions or isinstance(message.channel, discord.DMChannel):
+            return True
+        
+        # Check rate limiting
+        channel_id = message.channel.id
+        current_time = datetime.now().timestamp()
+        
+        if channel_id in self.last_message_time:
+            time_diff = current_time - self.last_message_time[channel_id]
+            if time_diff < self.cooldown:
+                return False
+        
+        return False
     
-    async def update_conversation_history(self, server_id: str, message: str, response: str, user_name: str = None):
-        """Update conversation history in MongoDB with new exchange"""
-        if not self.conversation_history_collection:
-            logger.error("MongoDB collection not initialized")
-            return
+    async def get_ai_response(self, message):
+        """
+        Get response from Groq API
+        
+        Args:
+            message: The Discord message object
             
-        key = f"{server_id}_{user_name}" if user_name else server_id
+        Returns:
+            str: AI response text or None if error
+        """
+        if not self.api_key:
+            return "I'm sorry, my AI capabilities are currently unavailable. Please check my configuration."
+        
+        # Prepare conversation context
+        channel_id = message.channel.id
+        if channel_id not in self.conversation_context:
+            self.conversation_context[channel_id] = []
+        
+        # Build conversation history for the API
+        messages = [
+            {
+                "role": "system", 
+                "content": "You are a helpful AI assistant in a Discord server. Be friendly, concise, and engaging."
+            }
+        ]
+        
+        # Add conversation history if available
+        for msg in self.conversation_context[channel_id]:
+            role = "user" if msg["role"] == "user" else "assistant"
+            messages.append({"role": role, "content": msg["content"]})
+        
+        # Add the current message
+        messages.append({"role": "user", "content": message.clean_content})
+        
+        # Prepare payload for Groq API
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 1024,
+            "top_p": 1,
+            "stream": False
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
         
         try:
-            history = await self.get_conversation_history(server_id, user_name)
-            
-            # Add new messages
-            history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": response})
-            
-            # Trim history if too long (keeping the initial personality prompt)
-            if len(history) > self.MAX_HISTORY_LENGTH + 2:  # +2 for the initial personality messages
-                history = history[:2] + history[-(self.MAX_HISTORY_LENGTH):]
-            
-            # Update MongoDB
-            await self.conversation_history_collection.update_one(
-                {"context_key": key},
-                {"$set": {"history": history, "last_updated": datetime.utcnow()}},
-                upsert=True
-            )
-        except Exception as e:
-            logger.error(f"Error updating conversation history: {e}")
-    
-    async def generate_gwen_response(self, message: str, server_id: str, user_name: str = None) -> str:
-        """Generate a response from Gwen using Groq API"""
-        if not self.client:
-            logger.error("Groq client not initialized")
-            return "Sorry, I'm not properly configured to connect to the spider-verse right now. 🕸️"
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.api_url, json=payload, headers=headers, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        response_text = data["choices"][0]["message"]["content"]
+                        
+                        # Update conversation context
+                        self.conversation_context[channel_id].append({
+                            "role": "user",
+                            "content": message.clean_content,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        self.conversation_context[channel_id].append({
+                            "role": "assistant",
+                            "content": response_text,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        
+                        # Keep context manageable size
+                        if len(self.conversation_context[channel_id]) > 20:
+                            self.conversation_context[channel_id] = self.conversation_context[channel_id][-10:]
+                        
+                        return response_text
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Groq API error: {response.status} - {error_text}")
+                        return "I'm experiencing technical difficulties. Please try again later."
         
-        try:
-            history = await self.get_conversation_history(server_id, user_name)
-            
-            # Prepare messages for Groq API
-            messages = history + [{"role": "user", "content": message}]
-            
-            # Call Groq API
-            chat_completion = await asyncio.to_thread(
-                self.client.chat.completions.create,
-                messages=messages,
-                model="llama3-70b-8192",  # You can change this to any Groq-supported model
-                temperature=0.7,
-                max_tokens=1024
-            )
-            
-            response_text = chat_completion.choices[0].message.content
-            
-            # Update conversation history
-            await self.update_conversation_history(server_id, message, response_text, user_name)
-            
-            return response_text
-        except groq.APIError as e:
-            logger.error(f"Groq API Error: {e}")
-            return "Sorry, I'm having trouble connecting to the spider-verse API right now. 🕸️"
-        except groq.RateLimitError as e:
-            logger.error(f"Groq Rate Limit Error: {e}")
-            return "I'm getting a bit overwhelmed with requests right now. Try again in a moment! 🥁"
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error contacting Groq API: {str(e)}")
+            return "I'm having trouble connecting to my AI service. Please try again later."
+        except asyncio.TimeoutError:
+            logger.error("Groq API request timed out")
+            return "My AI service is taking too long to respond. Please try again later."
         except Exception as e:
-            logger.error(f"Unexpected error generating response: {e}")
-            return "Sorry, something unexpected went wrong. Could you try again? 🕸️"
+            logger.error(f"Unexpected error in get_ai_response: {str(e)}")
+            return "An unexpected error occurred. Please try again later."
     
     @commands.Cog.listener()
     async def on_message(self, message):
-        # Ignore messages from the bot itself
-        if message.author == self.bot.user:
+        """
+        Handle incoming messages and respond when appropriate
+        
+        Args:
+            message: The Discord message object
+        """
+        # Check if we should respond to this message
+        if not self.should_respond(message):
             return
         
-        # Get owner ID and allowed channel ID from environment
-        OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
-        ALLOWED_CHANNEL_ID = int(os.getenv('ALLOWED_CHANNEL_ID', 0))
+        # Update rate limiting
+        self.last_message_time[message.channel.id] = datetime.now().timestamp()
         
-        # Handle DMs
-        if isinstance(message.channel, discord.DMChannel):
-            if message.author.id == OWNER_ID and message.content.startswith('!dm'):
-                # Owner can send DMs to users through the bot
-                try:
-                    parts = message.content.split(' ', 2)
-                    if len(parts) < 3:
-                        await message.channel.send("Usage: !dm <user_id> <message>")
-                        return
-                        
-                    user_id = int(parts[1])
-                    dm_message = parts[2]
-                    user = await self.bot.fetch_user(user_id)
-                    await user.send(f"**Gwen Stacy:** {dm_message}")
-                    await message.channel.send(f"Message sent to {user.name}!")
-                except ValueError:
-                    await message.channel.send("Invalid user ID format.")
-                except discord.NotFound:
-                    await message.channel.send("User not found.")
-                except discord.Forbidden:
-                    await message.channel.send("Cannot send messages to this user.")
-                except Exception as e:
-                    await message.channel.send(f"Couldn't send message: {e}")
-            else:
-                # Regular DMs from users
-                try:
-                    response = await self.generate_gwen_response(
-                        message.content, 
-                        str(message.author.id),  # Use user ID as "server ID" for DMs
-                        message.author.name
-                    )
-                    await message.channel.send(response)
-                except Exception as e:
-                    logger.error(f"Error handling DM: {e}")
-                    await message.channel.send("Sorry, I encountered an error processing your message. 🕸️")
+        # Send typing indicator
+        async with message.channel.typing():
+            # Get AI response
+            response = await self.get_ai_response(message)
+            
+            # Send response
+            if response:
+                # Split long messages to avoid Discord's character limit
+                if len(response) > 2000:
+                    chunks = [response[i:i+2000] for i in range(0, len(response), 2000)]
+                    for chunk in chunks:
+                        await message.reply(chunk, mention_author=False)
+                else:
+                    await message.reply(response, mention_author=False)
+    
+    @commands.hybrid_command(name="reset_chat", description="Reset conversation context with AI")
+    async def reset_chat(self, ctx):
+        """
+        Reset the conversation context with AI
+        
+        Args:
+            ctx: Discord context
+        """
+        if not self.enabled:
+            await ctx.send("❌ AI features are currently disabled. Please configure the API key.", ephemeral=True)
             return
-        
-        # Handle server messages in the allowed channel only
-        if ALLOWED_CHANNEL_ID and message.channel.id == ALLOWED_CHANNEL_ID:
-            # Check if the bot is mentioned
-            if self.bot.user in message.mentions:
-                # Remove the mention from the message
-                clean_content = message.content.replace(f'<@{self.bot.user.id}>', '').strip()
-                
-                if clean_content:  # Only respond if there's content beyond the mention
-                    # Get the user's name for personalization
-                    user_name = message.author.display_name
-                    
-                    # Create a personalized prompt
-                    personalized_message = f"{user_name} says: {clean_content}"
-                    
-                    try:
-                        response = await self.generate_gwen_response(
-                            personalized_message, 
-                            str(message.guild.id)
-                        )
-                        
-                        # Add the user's name to the response for context
-                        await message.channel.send(f"{message.author.mention} {response}")
-                    except Exception as e:
-                        logger.error(f"Error generating server response: {e}")
-                        await message.channel.send(f"{message.author.mention} Sorry, I'm having trouble responding right now. 🕸️")
-    
-    @commands.command(name='gwen_reset')
-    async def reset_conversation(self, ctx, user_name: str = None):
-        """Reset conversation history (admin only)"""
-        OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
-        
-        if ctx.author.id == OWNER_ID:
-            if not self.conversation_history_collection:
-                await ctx.send("Database not connected. Cannot reset history.")
-                return
-                
-            key = f"{ctx.guild.id}_{user_name}" if user_name else str(ctx.guild.id)
-            result = await self.conversation_history_collection.delete_one({"context_key": key})
             
-            if result.deleted_count > 0:
-                await ctx.send("Conversation history reset! 🕸️")
-            else:
-                await ctx.send("No history found to reset.")
+        channel_id = ctx.channel.id
+        if channel_id in self.conversation_context:
+            self.conversation_context[channel_id] = []
+            await ctx.send("✅ Conversation context has been reset.", ephemeral=True)
         else:
-            await ctx.send("Only my owner can do that.")
+            await ctx.send("🤔 No conversation context to reset in this channel.", ephemeral=True)
     
-    @commands.command(name='gwen_history')
-    async def show_history_info(self, ctx):
-        """Show information about conversation history storage"""
-        OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
+    @commands.hybrid_command(name="chat", description="Chat with AI")
+    async def chat_command(self, ctx, *, message: str):
+        """
+        Direct command to chat with AI
         
-        if ctx.author.id == OWNER_ID:
-            if not self.conversation_history_collection:
-                await ctx.send("Database not connected.")
-                return
-                
-            # Count total conversations stored
-            count = await self.conversation_history_collection.count_documents({})
+        Args:
+            ctx: Discord context
+            message: The message to send to AI
+        """
+        if not self.enabled:
+            await ctx.send("❌ AI features are currently disabled. Please configure the API key.", ephemeral=True)
+            return
             
-            # Get some stats about the largest histories
-            pipeline = [
-                {"$project": {"context_key": 1, "history_size": {"$size": "$history"}}},
-                {"$sort": {"history_size": -1}},
-                {"$limit": 5}
-            ]
-            largest = await self.conversation_history_collection.aggregate(pipeline).to_list(length=5)
-            
-            embed = discord.Embed(
-                title="Conversation History Stats",
-                description=f"Stored in MongoDB collection: conversation_history",
-                color=0x00ff00
-            )
-            embed.add_field(name="Total Conversations", value=str(count), inline=False)
-            
-            if largest:
-                largest_text = "\n".join([f"{doc['context_key']}: {doc['history_size']} messages" for doc in largest])
-                embed.add_field(name="Largest Histories", value=largest_text, inline=False)
-            
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("Only my owner can see this information.")
-    
-    @commands.command(name='gwen_invite')
-    async def invite_info(self, ctx):
-        """Get info about inviting the bot"""
-        embed = discord.Embed(
-            title="Gwen Stacy Bot",
-            description="Hey! I'm Gwen Stacy from the Spider-Verse. I'm here to chat with you about anything!",
-            color=0xff00ff
+        # Create a mock message object for processing
+        class MockMessage:
+            def __init__(self, content, author, channel, guild):
+                self.clean_content = content
+                self.author = author
+                self.channel = channel
+                self.guild = guild
+        
+        mock_message = MockMessage(
+            content=message,
+            author=ctx.author,
+            channel=ctx.channel,
+            guild=ctx.guild
         )
-        embed.add_field(
-            name="How to talk to me",
-            value=f"In the server, mention me with @Gwen followed by your message. Or just DM me directly!",
-            inline=False
-        )
-        embed.set_thumbnail(url="https://i.imgur.com/6C5wM5n.png")  # Replace with a Gwen Stacy image URL
-        await ctx.send(embed=embed)
-    
-    @commands.command(name='gwen_status')
-    async def status_info(self, ctx):
-        """Check the status of the AI service"""
-        OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
         
-        if ctx.author.id == OWNER_ID:
-            embed = discord.Embed(
-                title="Gwen Stacy Status",
-                color=0x00ff00 if self.client else 0xff0000
-            )
+        # Send typing indicator
+        async with ctx.channel.typing():
+            # Get AI response
+            response = await self.get_ai_response(mock_message)
             
-            # Database status
-            db_status = "✅ Connected" if self.conversation_history_collection else "❌ Disconnected"
-            embed.add_field(name="Database", value=db_status, inline=False)
+            # Send response
+            if response:
+                await ctx.send(response)
+    
+    @commands.hybrid_command(name="set_model", description="Set the AI model (Admin only)")
+    @commands.has_permissions(administrator=True)
+    async def set_model(self, ctx, model_name: str):
+        """
+        Set the AI model to use (Admin only)
+        
+        Args:
+            ctx: Discord context
+            model_name: The name of the model to use
+        """
+        # List of available Groq models (you can expand this list)
+        available_models = [
+            "llama3-8b-8192",
+            "llama3-70b-8192",
+            "mixtral-8x7b-32768",
+            "gemma-7b-it"
+        ]
+        
+        if model_name not in available_models:
+            await ctx.send(f"❌ Invalid model. Available models: {', '.join(available_models)}", ephemeral=True)
+            return
             
-            # Groq API status
-            api_status = "✅ Connected" if self.client else "❌ Disconnected"
-            embed.add_field(name="Groq API", value=api_status, inline=False)
-            
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("Only my owner can check my status.")
+        self.model = model_name
+        await ctx.send(f"✅ Model set to: {model_name}", ephemeral=True)
+        logger.info(f"Model changed to: {model_name}")
 
+# ============================================================================
+# COG SETUP SECTION
+# ============================================================================
 
 async def setup(bot):
-    """Setup function for the cog"""
-    await bot.add_cog(AIChat(bot))
+    """
+    Setup function called by Discord.py to load this cog
+    
+    Args:
+        bot: The Discord bot instance
+    """
+    await bot.add_cog(AIChatCog(bot))
+    logger.info("Groq AI cog setup complete")
