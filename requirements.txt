@@ -6,5 +6,4 @@ aiohttp
 pytz
 dnspython
 PyNaCl
-google-generativeai
-
+groq
