@@ -5,12 +5,16 @@ import groq
 import asyncio
 from datetime import datetime
 from typing import Dict, List
+import logging
 
 # Import your database utilities
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.database import get_guild_config, update_guild_config
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class AIChat(commands.Cog):
@@ -19,9 +23,7 @@ class AIChat(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.conversation_history_collection = None
-        
-        # Groq API setup
-        self.client = groq.Client(api_key=os.getenv('GROQ_API_KEY'))
+        self.client = None
         
         # Constants
         self.MAX_HISTORY_LENGTH = 20
@@ -60,56 +62,92 @@ class AIChat(commands.Cog):
             await self.conversation_history_collection.create_index("context_key")
             await self.conversation_history_collection.create_index("last_updated")
             
-            print("✅ AI Chat: MongoDB connection established")
+            logger.info("✅ AI Chat: MongoDB connection established")
         except Exception as e:
-            print(f"❌ AI Chat: Failed to connect to MongoDB: {e}")
+            logger.error(f"❌ AI Chat: Failed to connect to MongoDB: {e}")
             raise
+        
+        # Initialize Groq client
+        try:
+            api_key = os.getenv('GROQ_API_KEY')
+            if not api_key:
+                logger.error("❌ GROQ_API_KEY environment variable not set")
+                return
+                
+            self.client = groq.Client(api_key=api_key)
+            logger.info("✅ Groq client initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Groq client: {e}")
     
     async def get_conversation_history(self, server_id: str, user_name: str = None) -> List[Dict[str, str]]:
         """Get conversation history for a server from MongoDB, with optional user context"""
+        if not self.conversation_history_collection:
+            logger.error("MongoDB collection not initialized")
+            return []
+            
         key = f"{server_id}_{user_name}" if user_name else server_id
         
-        # Try to get existing history from MongoDB
-        history_doc = await self.conversation_history_collection.find_one({"context_key": key})
-        
-        if history_doc:
-            return history_doc.get("history", [])
-        else:
-            # Initialize with personality prompt if no history exists
-            initial_history = [
-                {"role": "system", "content": self.GWEN_PERSONALITY},
-                {"role": "assistant", "content": "Got it. I'm Gwen Stacy. Let's chat!"}
+        try:
+            # Try to get existing history from MongoDB
+            history_doc = await self.conversation_history_collection.find_one({"context_key": key})
+            
+            if history_doc:
+                return history_doc.get("history", [])
+            else:
+                # Initialize with personality prompt if no history exists
+                initial_history = [
+                    {"role": "system", "content": self.GWEN_PERSONALITY},
+                    {"role": "assistant", "content": "Got it. I'm Gwen Stacy. Let's chat!"}
+                ]
+                # Save to MongoDB
+                await self.conversation_history_collection.insert_one({
+                    "context_key": key,
+                    "history": initial_history,
+                    "last_updated": datetime.utcnow()
+                })
+                return initial_history
+        except Exception as e:
+            logger.error(f"Error getting conversation history: {e}")
+            # Return basic history without personality if DB fails
+            return [
+                {"role": "system", "content": "You are Gwen Stacy from the Spider-Verse."},
+                {"role": "assistant", "content": "Hey there! Let's chat."}
             ]
-            # Save to MongoDB
-            await self.conversation_history_collection.insert_one({
-                "context_key": key,
-                "history": initial_history,
-                "last_updated": datetime.utcnow()
-            })
-            return initial_history
     
     async def update_conversation_history(self, server_id: str, message: str, response: str, user_name: str = None):
         """Update conversation history in MongoDB with new exchange"""
+        if not self.conversation_history_collection:
+            logger.error("MongoDB collection not initialized")
+            return
+            
         key = f"{server_id}_{user_name}" if user_name else server_id
-        history = await self.get_conversation_history(server_id, user_name)
         
-        # Add new messages
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": response})
-        
-        # Trim history if too long (keeping the initial personality prompt)
-        if len(history) > self.MAX_HISTORY_LENGTH + 2:  # +2 for the initial personality messages
-            history = history[:2] + history[-(self.MAX_HISTORY_LENGTH):]
-        
-        # Update MongoDB
-        await self.conversation_history_collection.update_one(
-            {"context_key": key},
-            {"$set": {"history": history, "last_updated": datetime.utcnow()}},
-            upsert=True
-        )
+        try:
+            history = await self.get_conversation_history(server_id, user_name)
+            
+            # Add new messages
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": response})
+            
+            # Trim history if too long (keeping the initial personality prompt)
+            if len(history) > self.MAX_HISTORY_LENGTH + 2:  # +2 for the initial personality messages
+                history = history[:2] + history[-(self.MAX_HISTORY_LENGTH):]
+            
+            # Update MongoDB
+            await self.conversation_history_collection.update_one(
+                {"context_key": key},
+                {"$set": {"history": history, "last_updated": datetime.utcnow()}},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error updating conversation history: {e}")
     
     async def generate_gwen_response(self, message: str, server_id: str, user_name: str = None) -> str:
         """Generate a response from Gwen using Groq API"""
+        if not self.client:
+            logger.error("Groq client not initialized")
+            return "Sorry, I'm not properly configured to connect to the spider-verse right now. 🕸️"
+        
         try:
             history = await self.get_conversation_history(server_id, user_name)
             
@@ -131,9 +169,15 @@ class AIChat(commands.Cog):
             await self.update_conversation_history(server_id, message, response_text, user_name)
             
             return response_text
+        except groq.APIError as e:
+            logger.error(f"Groq API Error: {e}")
+            return "Sorry, I'm having trouble connecting to the spider-verse API right now. 🕸️"
+        except groq.RateLimitError as e:
+            logger.error(f"Groq Rate Limit Error: {e}")
+            return "I'm getting a bit overwhelmed with requests right now. Try again in a moment! 🥁"
         except Exception as e:
-            print(f"Error generating response: {e}")
-            return "Sorry, I'm having trouble connecting to the spider-verse right now. 🕸️"
+            logger.error(f"Unexpected error generating response: {e}")
+            return "Sorry, something unexpected went wrong. Could you try again? 🕸️"
     
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -151,25 +195,39 @@ class AIChat(commands.Cog):
                 # Owner can send DMs to users through the bot
                 try:
                     parts = message.content.split(' ', 2)
+                    if len(parts) < 3:
+                        await message.channel.send("Usage: !dm <user_id> <message>")
+                        return
+                        
                     user_id = int(parts[1])
                     dm_message = parts[2]
                     user = await self.bot.fetch_user(user_id)
                     await user.send(f"**Gwen Stacy:** {dm_message}")
                     await message.channel.send(f"Message sent to {user.name}!")
+                except ValueError:
+                    await message.channel.send("Invalid user ID format.")
+                except discord.NotFound:
+                    await message.channel.send("User not found.")
+                except discord.Forbidden:
+                    await message.channel.send("Cannot send messages to this user.")
                 except Exception as e:
                     await message.channel.send(f"Couldn't send message: {e}")
             else:
                 # Regular DMs from users
-                response = await self.generate_gwen_response(
-                    message.content, 
-                    str(message.author.id),  # Use user ID as "server ID" for DMs
-                    message.author.name
-                )
-                await message.channel.send(response)
+                try:
+                    response = await self.generate_gwen_response(
+                        message.content, 
+                        str(message.author.id),  # Use user ID as "server ID" for DMs
+                        message.author.name
+                    )
+                    await message.channel.send(response)
+                except Exception as e:
+                    logger.error(f"Error handling DM: {e}")
+                    await message.channel.send("Sorry, I encountered an error processing your message. 🕸️")
             return
         
         # Handle server messages in the allowed channel only
-        if message.channel.id == ALLOWED_CHANNEL_ID:
+        if ALLOWED_CHANNEL_ID and message.channel.id == ALLOWED_CHANNEL_ID:
             # Check if the bot is mentioned
             if self.bot.user in message.mentions:
                 # Remove the mention from the message
@@ -182,13 +240,17 @@ class AIChat(commands.Cog):
                     # Create a personalized prompt
                     personalized_message = f"{user_name} says: {clean_content}"
                     
-                    response = await self.generate_gwen_response(
-                        personalized_message, 
-                        str(message.guild.id)
-                    )
-                    
-                    # Add the user's name to the response for context
-                    await message.channel.send(f"{message.author.mention} {response}")
+                    try:
+                        response = await self.generate_gwen_response(
+                            personalized_message, 
+                            str(message.guild.id)
+                        )
+                        
+                        # Add the user's name to the response for context
+                        await message.channel.send(f"{message.author.mention} {response}")
+                    except Exception as e:
+                        logger.error(f"Error generating server response: {e}")
+                        await message.channel.send(f"{message.author.mention} Sorry, I'm having trouble responding right now. 🕸️")
     
     @commands.command(name='gwen_reset')
     async def reset_conversation(self, ctx, user_name: str = None):
@@ -196,6 +258,10 @@ class AIChat(commands.Cog):
         OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
         
         if ctx.author.id == OWNER_ID:
+            if not self.conversation_history_collection:
+                await ctx.send("Database not connected. Cannot reset history.")
+                return
+                
             key = f"{ctx.guild.id}_{user_name}" if user_name else str(ctx.guild.id)
             result = await self.conversation_history_collection.delete_one({"context_key": key})
             
@@ -212,6 +278,10 @@ class AIChat(commands.Cog):
         OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
         
         if ctx.author.id == OWNER_ID:
+            if not self.conversation_history_collection:
+                await ctx.send("Database not connected.")
+                return
+                
             # Count total conversations stored
             count = await self.conversation_history_collection.count_documents({})
             
@@ -251,8 +321,31 @@ class AIChat(commands.Cog):
             value=f"In the server, mention me with @Gwen followed by your message. Or just DM me directly!",
             inline=False
         )
-        embed.set_thumbnail(url="https://i.imgur.com/6CwM5n.png")  # Replace with a Gwen Stacy image URL
+        embed.set_thumbnail(url="https://i.imgur.com/6C5wM5n.png")  # Replace with a Gwen Stacy image URL
         await ctx.send(embed=embed)
+    
+    @commands.command(name='gwen_status')
+    async def status_info(self, ctx):
+        """Check the status of the AI service"""
+        OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
+        
+        if ctx.author.id == OWNER_ID:
+            embed = discord.Embed(
+                title="Gwen Stacy Status",
+                color=0x00ff00 if self.client else 0xff0000
+            )
+            
+            # Database status
+            db_status = "✅ Connected" if self.conversation_history_collection else "❌ Disconnected"
+            embed.add_field(name="Database", value=db_status, inline=False)
+            
+            # Groq API status
+            api_status = "✅ Connected" if self.client else "❌ Disconnected"
+            embed.add_field(name="Groq API", value=api_status, inline=False)
+            
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Only my owner can check my status.")
 
 
 async def setup(bot):
