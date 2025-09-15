@@ -42,11 +42,13 @@ class AIChatCog(commands.Cog):
         """
         self.bot = bot
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
-        self.api_key = os.getenv('GROQ_API_KEY')
-        self.model = os.getenv('GROQ_MODEL', 'llama3-8b-8192')  # Default to a fast model
+        self.api_key = os.getenv("GROQ_API_KEY")
+        # Use replacement model if GROQ_MODEL is not set in .env
+        self.model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
         self.conversation_context = {}  # Store conversation context per channel
         self.last_message_time = {}  # Rate limiting per channel
-        self.cooldown = 2  # seconds between messages in the same channel
+        self.cooldown = 0  # seconds between messages in the same channel
+
         
         # Check if API key is configured
         if not self.api_key:
