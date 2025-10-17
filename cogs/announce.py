@@ -116,7 +116,7 @@ class AnnounceCog(commands.Cog):
                 embed.set_image(url=ctx.guild.banner.url)
             
             # Send announcement with @everyone mention
-            await announcement_channel.send(content="@everyone", embed=embed)
+            await announcement_channel.send(embed=embed)
             
             # Confirm to the admin
             await ctx.send(f"✅ Announcement sent to {announcement_channel.mention}!", ephemeral=True)
@@ -155,3 +155,4 @@ async def setup(bot):
     """
     await bot.add_cog(AnnounceCog(bot))
     logger.info("Announce cog setup complete")
+
