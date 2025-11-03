@@ -610,7 +610,7 @@ async def load_cogs(bot):
         'cogs.announce',         # Server announcement commands
         'cogs.invite_tracking',  # Member join/leave tracking and invite statistics
         'cogs.ai_chat',          # AI chat functionality
-        # 'cogs.roles'             # NEW: Role management including default roles
+        'cogs.roles'             # NEW: Role management including default roles
     ]
     
     loaded_cogs = 0
@@ -630,5 +630,6 @@ async def load_cogs(bot):
     
     if loaded_cogs < total_cogs:
         logger.warning(f'⚠️ {total_cogs - loaded_cogs} cog(s) failed to load')
+
 
 
