@@ -173,6 +173,24 @@ def create_bot():
             "usage": "!invitestats",
             "examples": ["!invitestats"],
             "bot_info": "📊 Invite Statistics Bot"
+        },
+        "setdefaultrole": {
+        "description": "Set default role for new members (Admin only)",
+        "usage": "!setdefaultrole @role",
+        "examples": ["!setdefaultrole @Members", "!setdefaultrole @Newcomers"],
+        "bot_info": "⚙️ Role Manager Bot"
+    },
+        "adddefaultroleall": {
+            "description": "Add default role to all existing members (Admin only)",
+            "usage": "!adddefaultroleall",
+            "examples": ["!adddefaultroleall"],
+            "bot_info": "⚙️ Role Manager Bot"
+        },
+        "showdefaultrole": {
+            "description": "Show current default role configuration (Admin only)",
+            "usage": "!showdefaultrole",
+            "examples": ["!showdefaultrole"],
+            "bot_info": "⚙️ Role Manager Bot"
         }
     }
 
@@ -630,6 +648,7 @@ async def load_cogs(bot):
     
     if loaded_cogs < total_cogs:
         logger.warning(f'⚠️ {total_cogs - loaded_cogs} cog(s) failed to load')
+
 
 
 
