@@ -75,6 +75,7 @@ def create_bot():
             w='majority'                      # Wait for majority of replicas
         )
         db = client[db_name]
+        bot.mongo = db
         
         logger.info("🔌 MongoDB connection established")
         
@@ -648,6 +649,7 @@ async def load_cogs(bot):
     
     if loaded_cogs < total_cogs:
         logger.warning(f'⚠️ {total_cogs - loaded_cogs} cog(s) failed to load')
+
 
 
 
