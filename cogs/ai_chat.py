@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 """
-AI Chat Cog - Groq AI Integration (with fallback system)
-
-This cog provides AI chat functionality using the Groq API.
-- Responds to mentions or DMs
-- Maintains per-channel context
-- Handles rate limiting and API errors
-- Supports model switching with fallback to a safe default
+AI Chat Cog - Groq AI Integration
+Persona: Gwen Stacy (Spider-Verse)
+Memory: Per-user + per-channel
 """
 
 import discord
@@ -24,64 +20,112 @@ class AIChatCog(commands.Cog):
         self.bot = bot
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
         self.api_key = os.getenv("GROQ_API_KEY")
-        # Default safe model
+
         self.default_model = "llama-3.1-8b-instant"
         self.model = os.getenv("GROQ_MODEL", self.default_model)
 
-        self.conversation_context = {}
+        # MEMORY
+        self.channel_context = {}   # channel_id -> messages
+        self.user_memory = {}       # user_id -> messages
+
         self.last_message_time = {}
         self.cooldown = 2
 
-        if not self.api_key:
-            logger.warning("Groq API key not configured. AI features disabled.")
-            self.enabled = False
-        else:
-            self.enabled = True
-            logger.info(f"Groq AI cog initialized with model: {self.model}")
+        self.enabled = bool(self.api_key)
 
-    @commands.Cog.listener()
-    async def on_ready(self):
         if self.enabled:
-            logger.info("Groq AI cog ready")
+            logger.info(f"Groq AI initialized with model: {self.model}")
         else:
-            logger.warning("Groq AI cog loaded but disabled (missing API key)")
+            logger.warning("Groq API key missing. AI disabled.")
+
+    # ------------------------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------------------------
+
+    def get_display_name(self, message):
+        if message.guild:
+            return message.author.display_name
+        return message.author.name
 
     def should_respond(self, message):
-        if not self.enabled or message.author == self.bot.user:
+        if not self.enabled:
+            return False
+        if message.author.bot:
             return False
 
-        if self.bot.user in message.mentions or isinstance(message.channel, discord.DMChannel):
+        # Respond to mentions or DMs
+        if isinstance(message.channel, discord.DMChannel):
+            return True
+        if self.bot.user in message.mentions:
             return True
 
-        channel_id = message.channel.id
-        now = datetime.now().timestamp()
-        if channel_id in self.last_message_time:
-            if now - self.last_message_time[channel_id] < self.cooldown:
-                return False
         return False
 
     async def query_groq(self, payload, headers):
-        """Low-level Groq API request with fallback"""
         async with aiohttp.ClientSession() as session:
-            async with session.post(self.api_url, json=payload, headers=headers, timeout=15) as resp:
-                data = await resp.json()
-                return resp.status, data
+            async with session.post(
+                self.api_url,
+                json=payload,
+                headers=headers,
+                timeout=15
+            ) as resp:
+                return resp.status, await resp.json()
+
+    # ------------------------------------------------------------------
+    # CORE AI LOGIC
+    # ------------------------------------------------------------------
 
     async def get_ai_response(self, message):
-        if not self.api_key:
-            return "❌ AI unavailable. Please configure GROQ_API_KEY."
-
+        user_id = message.author.id
         channel_id = message.channel.id
-        if channel_id not in self.conversation_context:
-            self.conversation_context[channel_id] = []
+        user_name = self.get_display_name(message)
 
+        # Init memory
+        self.user_memory.setdefault(user_id, [])
+        self.channel_context.setdefault(channel_id, [])
+
+        # Clean content (remove bot mention)
+        content = message.clean_content.replace(
+            f"@{self.bot.user.name}", ""
+        ).strip()
+
+        # SYSTEM PROMPT (GWEN STACY)
         messages = [
-            {"role": "system", "content": "You are a helpful Discord AI assistant. Be friendly, concise, and engaging."}
+            {
+                "role": "system",
+                "content": (
+                    f"You are Gwen Stacy (Spider-Gwen from Spider-Verse).\n"
+                    f"The user's name is {user_name}.\n\n"
+                    "Personality:\n"
+                    "- Confident, witty, playful, emotionally intelligent\n"
+                    "- Casual modern speech, light sarcasm\n"
+                    "- Caring and supportive when needed\n\n"
+                    "Rules:\n"
+                    "- Never mention being an AI or assistant\n"
+                    "- Never break character\n"
+                    "- Use the user's name naturally\n"
+                    "- Respond like a real person\n"
+                    "- Use at most one emoji per message\n"
+                )
+            }
         ]
-        for msg in self.conversation_context[channel_id]:
-            role = "user" if msg["role"] == "user" else "assistant"
-            messages.append({"role": role, "content": msg["content"]})
-        messages.append({"role": "user", "content": message.clean_content})
+
+        # USER MEMORY (personal history)
+        for msg in self.user_memory[user_id][-6:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+
+        # CHANNEL CONTEXT (conversation flow)
+        for msg in self.channel_context[channel_id][-6:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+
+        # Current message
+        messages.append({"role": "user", "content": content})
 
         payload = {
             "model": self.model,
@@ -89,96 +133,91 @@ class AIChatCog(commands.Cog):
             "temperature": 0.7,
             "max_tokens": 1024,
             "top_p": 1,
-            "stream": False,
+            "stream": False
         }
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
 
         try:
             status, data = await self.query_groq(payload, headers)
 
-            if status == 200:
-                response_text = data["choices"][0]["message"]["content"]
-            else:
-                # Handle decommissioned model fallback
+            if status != 200:
                 error_msg = data.get("error", {}).get("message", "")
                 if "decommissioned" in error_msg.lower():
-                    logger.warning(f"Model {self.model} decommissioned, falling back to {self.default_model}")
                     self.model = self.default_model
                     payload["model"] = self.default_model
                     status, data = await self.query_groq(payload, headers)
-                    if status == 200:
-                        response_text = data["choices"][0]["message"]["content"]
-                    else:
-                        logger.error(f"Groq fallback failed: {status} - {data}")
-                        return "⚠️ AI service error. Please try again later."
-                else:
-                    logger.error(f"Groq API error: {status} - {data}")
-                    return "⚠️ AI service error. Please try again later."
 
-            # Update context
-            self.conversation_context[channel_id].append(
-                {"role": "user", "content": message.clean_content, "timestamp": datetime.now().isoformat()}
-            )
-            self.conversation_context[channel_id].append(
-                {"role": "assistant", "content": response_text, "timestamp": datetime.now().isoformat()}
-            )
+            if status != 200:
+                logger.error(f"Groq error: {status} - {data}")
+                return "⚠️ Something went wrong. Try again in a bit."
 
-            if len(self.conversation_context[channel_id]) > 20:
-                self.conversation_context[channel_id] = self.conversation_context[channel_id][-10:]
+            response_text = data["choices"][0]["message"]["content"]
+            timestamp = datetime.now().isoformat()
+
+            # SAVE MEMORY
+            self.user_memory[user_id].extend([
+                {"role": "user", "content": content, "timestamp": timestamp},
+                {"role": "assistant", "content": response_text, "timestamp": timestamp}
+            ])
+
+            self.channel_context[channel_id].extend([
+                {"role": "user", "content": content, "timestamp": timestamp},
+                {"role": "assistant", "content": response_text, "timestamp": timestamp}
+            ])
+
+            # LIMIT MEMORY
+            if len(self.user_memory[user_id]) > 30:
+                self.user_memory[user_id] = self.user_memory[user_id][-20:]
+
+            if len(self.channel_context[channel_id]) > 20:
+                self.channel_context[channel_id] = self.channel_context[channel_id][-10:]
 
             return response_text
 
         except asyncio.TimeoutError:
-            logger.error("Groq API request timed out")
-            return "⏳ AI service is taking too long to respond. Try again later."
+            return "⏳ Took too long… multiverse lag."
         except Exception as e:
-            logger.error(f"Unexpected AI error: {e}")
-            return "❌ An unexpected error occurred with the AI."
+            logger.exception("AI error")
+            return "❌ Something weird just happened."
+
+    # ------------------------------------------------------------------
+    # EVENTS
+    # ------------------------------------------------------------------
 
     @commands.Cog.listener()
     async def on_message(self, message):
         if not self.should_respond(message):
             return
 
-        self.last_message_time[message.channel.id] = datetime.now().timestamp()
-
         async with message.channel.typing():
             response = await self.get_ai_response(message)
             if response:
                 if len(response) > 2000:
-                    for chunk in [response[i:i+2000] for i in range(0, len(response), 2000)]:
-                        await message.reply(chunk, mention_author=False)
+                    for chunk in range(0, len(response), 2000):
+                        await message.reply(
+                            response[chunk:chunk+2000],
+                            mention_author=False
+                        )
                 else:
                     await message.reply(response, mention_author=False)
 
-    @commands.hybrid_command(name="reset_chat", description="Reset AI conversation context")
+    # ------------------------------------------------------------------
+    # COMMANDS
+    # ------------------------------------------------------------------
+
+    @commands.hybrid_command(name="reset_chat", description="Reset channel conversation")
     async def reset_chat(self, ctx):
-        if not self.enabled:
-            await ctx.send("❌ AI features disabled. Missing API key.", ephemeral=True)
-            return
+        self.channel_context[ctx.channel.id] = []
+        await ctx.send("🕷️ Cleared the vibe in this channel.", ephemeral=True)
 
-        self.conversation_context[ctx.channel.id] = []
-        await ctx.send("✅ Conversation context has been reset.", ephemeral=True)
-
-    @commands.hybrid_command(name="chat", description="Chat with AI directly")
-    async def chat_command(self, ctx, *, message: str):
-        if not self.enabled:
-            await ctx.send("❌ AI disabled. Configure API key.", ephemeral=True)
-            return
-
-        class MockMessage:
-            def __init__(self, content, author, channel, guild):
-                self.clean_content = content
-                self.author = author
-                self.channel = channel
-                self.guild = guild
-
-        mock = MockMessage(message, ctx.author, ctx.channel, ctx.guild)
-
-        async with ctx.channel.typing():
-            response = await self.get_ai_response(mock)
-            if response:
-                await ctx.send(response)
+    @commands.hybrid_command(name="reset_me", description="Reset your personal memory")
+    async def reset_me(self, ctx):
+        self.user_memory[ctx.author.id] = []
+        await ctx.send("💙 Fresh start. I won’t hold the past against you.", ephemeral=True)
 
     @commands.hybrid_command(name="set_model", description="Set AI model (Admin only)")
     @commands.has_permissions(administrator=True)
@@ -188,21 +227,22 @@ class AIChatCog(commands.Cog):
             "llama-3.3-70b-versatile",
             "gemma-7b-it",
             "mixtral-8x7b-32768",
-            "meta-llama/llama-guard-4-12b",
         ]
 
         if model_name not in available_models:
-            await ctx.send(f"❌ Invalid model. Available: {', '.join(available_models)}", ephemeral=True)
+            await ctx.send(
+                f"❌ Invalid model.\nAvailable: {', '.join(available_models)}",
+                ephemeral=True
+            )
             return
 
         self.model = model_name
-        await ctx.send(f"✅ Model set to: {model_name}", ephemeral=True)
-        logger.info(f"AI model changed to: {model_name}")
+        await ctx.send(f"✅ Model set to **{model_name}**", ephemeral=True)
 
-# ============================================================================
-# COG SETUP
-# ============================================================================
+# ------------------------------------------------------------------
+# SETUP
+# ------------------------------------------------------------------
 
 async def setup(bot):
     await bot.add_cog(AIChatCog(bot))
-    logger.info("Groq AI cog setup complete")
+    logger.info("Gwen Stacy AI cog loaded")
