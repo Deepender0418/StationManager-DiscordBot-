@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-AI Chat Cog - Groq AI Integration
-Persona: Gwen Stacy (Spider-Verse)
-Memory: Per-user + per-channel
+AI Chat Cog - Gwen Stacy (Spider-Verse)
+Groq API + MongoDB Persistent Memory
+Hybrid RAM + DB memory (FAST)
 """
 
 import discord
 from discord.ext import commands
 import aiohttp
+import asyncio
 import logging
 import os
-import asyncio
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -18,29 +18,37 @@ logger = logging.getLogger(__name__)
 class AIChatCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+        # ---------------- AI CONFIG ----------------
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
         self.api_key = os.getenv("GROQ_API_KEY")
 
         self.default_model = "llama-3.1-8b-instant"
         self.model = os.getenv("GROQ_MODEL", self.default_model)
 
-        # MEMORY
-        self.channel_context = {}   # channel_id -> messages
-        self.user_memory = {}       # user_id -> messages
+        self.enabled = bool(self.api_key)
 
+        # ---------------- DATABASE ----------------
+        self.db = bot.mongo
+        self.user_collection = self.db.user_memory
+        self.channel_collection = self.db.channel_memory
+
+        # ---------------- MEMORY CACHE (RAM) ----------------
+        self.user_memory_cache = {}      # user_id -> list
+        self.channel_memory_cache = {}   # channel_id -> list
+
+        # ---------------- COOLDOWN ----------------
         self.last_message_time = {}
         self.cooldown = 2
 
-        self.enabled = bool(self.api_key)
-
         if self.enabled:
-            logger.info(f"Groq AI initialized with model: {self.model}")
+            logger.info("🕷️ Gwen Stacy AI loaded")
         else:
-            logger.warning("Groq API key missing. AI disabled.")
+            logger.warning("Groq API key missing — AI disabled")
 
-    # ------------------------------------------------------------------
+    # ======================================================
     # HELPERS
-    # ------------------------------------------------------------------
+    # ======================================================
 
     def get_display_name(self, message):
         if message.guild:
@@ -52,14 +60,51 @@ class AIChatCog(commands.Cog):
             return False
         if message.author.bot:
             return False
-
-        # Respond to mentions or DMs
         if isinstance(message.channel, discord.DMChannel):
             return True
         if self.bot.user in message.mentions:
             return True
-
         return False
+
+    # ======================================================
+    # MEMORY (HYBRID CACHE + MONGO)
+    # ======================================================
+
+    async def get_user_memory(self, user_id):
+        if user_id in self.user_memory_cache:
+            return self.user_memory_cache[user_id]
+
+        doc = await self.user_collection.find_one({"user_id": user_id})
+        memory = doc["messages"] if doc else []
+        self.user_memory_cache[user_id] = memory
+        return memory
+
+    async def get_channel_memory(self, channel_id):
+        if channel_id in self.channel_memory_cache:
+            return self.channel_memory_cache[channel_id]
+
+        doc = await self.channel_collection.find_one({"channel_id": channel_id})
+        memory = doc["messages"] if doc else []
+        self.channel_memory_cache[channel_id] = memory
+        return memory
+
+    async def save_user_memory(self, user_id, memory):
+        await self.user_collection.update_one(
+            {"user_id": user_id},
+            {"$set": {"messages": memory}},
+            upsert=True
+        )
+
+    async def save_channel_memory(self, channel_id, memory):
+        await self.channel_collection.update_one(
+            {"channel_id": channel_id},
+            {"$set": {"messages": memory}},
+            upsert=True
+        )
+
+    # ======================================================
+    # GROQ REQUEST
+    # ======================================================
 
     async def query_groq(self, payload, headers):
         async with aiohttp.ClientSession() as session:
@@ -71,25 +116,23 @@ class AIChatCog(commands.Cog):
             ) as resp:
                 return resp.status, await resp.json()
 
-    # ------------------------------------------------------------------
+    # ======================================================
     # CORE AI LOGIC
-    # ------------------------------------------------------------------
+    # ======================================================
 
     async def get_ai_response(self, message):
         user_id = message.author.id
         channel_id = message.channel.id
         user_name = self.get_display_name(message)
 
-        # Init memory
-        self.user_memory.setdefault(user_id, [])
-        self.channel_context.setdefault(channel_id, [])
-
-        # Clean content (remove bot mention)
         content = message.clean_content.replace(
             f"@{self.bot.user.name}", ""
         ).strip()
 
-        # SYSTEM PROMPT (GWEN STACY)
+        user_memory = await self.get_user_memory(user_id)
+        channel_memory = await self.get_channel_memory(channel_id)
+
+        # ---------------- SYSTEM PROMPT ----------------
         messages = [
             {
                 "role": "system",
@@ -99,41 +142,30 @@ class AIChatCog(commands.Cog):
                     "Personality:\n"
                     "- Confident, witty, playful, emotionally intelligent\n"
                     "- Casual modern speech, light sarcasm\n"
-                    "- Caring and supportive when needed\n\n"
+                    "- Caring when needed\n\n"
                     "Rules:\n"
-                    "- Never mention being an AI or assistant\n"
+                    "- Never mention being an AI\n"
                     "- Never break character\n"
                     "- Use the user's name naturally\n"
-                    "- Respond like a real person\n"
-                    "- Use at most one emoji per message\n"
+                    "- Use at most one emoji per reply\n"
                 )
             }
         ]
 
-        # USER MEMORY (personal history)
-        for msg in self.user_memory[user_id][-6:]:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
+        # ---------------- MEMORY INJECTION ----------------
+        for msg in user_memory[-6:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # CHANNEL CONTEXT (conversation flow)
-        for msg in self.channel_context[channel_id][-6:]:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
+        for msg in channel_memory[-6:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # Current message
         messages.append({"role": "user", "content": content})
 
         payload = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 1024,
-            "top_p": 1,
-            "stream": False
+            "max_tokens": 1024
         }
 
         headers = {
@@ -145,48 +177,49 @@ class AIChatCog(commands.Cog):
             status, data = await self.query_groq(payload, headers)
 
             if status != 200:
-                error_msg = data.get("error", {}).get("message", "")
-                if "decommissioned" in error_msg.lower():
+                err = data.get("error", {}).get("message", "")
+                if "decommissioned" in err.lower():
                     self.model = self.default_model
                     payload["model"] = self.default_model
                     status, data = await self.query_groq(payload, headers)
 
             if status != 200:
                 logger.error(f"Groq error: {status} - {data}")
-                return "⚠️ Something went wrong. Try again in a bit."
+                return "⚠️ Something went wrong."
 
-            response_text = data["choices"][0]["message"]["content"]
-            timestamp = datetime.now().isoformat()
+            response = data["choices"][0]["message"]["content"]
+            ts = datetime.now().isoformat()
 
-            # SAVE MEMORY
-            self.user_memory[user_id].extend([
-                {"role": "user", "content": content, "timestamp": timestamp},
-                {"role": "assistant", "content": response_text, "timestamp": timestamp}
+            # ---------------- SAVE MEMORY ----------------
+            user_memory.extend([
+                {"role": "user", "content": content, "ts": ts},
+                {"role": "assistant", "content": response, "ts": ts}
             ])
 
-            self.channel_context[channel_id].extend([
-                {"role": "user", "content": content, "timestamp": timestamp},
-                {"role": "assistant", "content": response_text, "timestamp": timestamp}
+            channel_memory.extend([
+                {"role": "user", "content": content, "ts": ts},
+                {"role": "assistant", "content": response, "ts": ts}
             ])
 
             # LIMIT MEMORY
-            if len(self.user_memory[user_id]) > 30:
-                self.user_memory[user_id] = self.user_memory[user_id][-20:]
+            user_memory[:] = user_memory[-20:]
+            channel_memory[:] = channel_memory[-10:]
 
-            if len(self.channel_context[channel_id]) > 20:
-                self.channel_context[channel_id] = self.channel_context[channel_id][-10:]
+            # Async save (non-blocking)
+            asyncio.create_task(self.save_user_memory(user_id, user_memory))
+            asyncio.create_task(self.save_channel_memory(channel_id, channel_memory))
 
-            return response_text
+            return response
 
         except asyncio.TimeoutError:
-            return "⏳ Took too long… multiverse lag."
-        except Exception as e:
+            return "⏳ Multiverse lag. Try again."
+        except Exception:
             logger.exception("AI error")
-            return "❌ Something weird just happened."
+            return "❌ Something broke."
 
-    # ------------------------------------------------------------------
+    # ======================================================
     # EVENTS
-    # ------------------------------------------------------------------
+    # ======================================================
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -194,55 +227,34 @@ class AIChatCog(commands.Cog):
             return
 
         async with message.channel.typing():
-            response = await self.get_ai_response(message)
-            if response:
-                if len(response) > 2000:
-                    for chunk in range(0, len(response), 2000):
-                        await message.reply(
-                            response[chunk:chunk+2000],
-                            mention_author=False
-                        )
+            reply = await self.get_ai_response(message)
+            if reply:
+                if len(reply) > 2000:
+                    for i in range(0, len(reply), 2000):
+                        await message.reply(reply[i:i+2000], mention_author=False)
                 else:
-                    await message.reply(response, mention_author=False)
+                    await message.reply(reply, mention_author=False)
 
-    # ------------------------------------------------------------------
+    # ======================================================
     # COMMANDS
-    # ------------------------------------------------------------------
+    # ======================================================
 
-    @commands.hybrid_command(name="reset_chat", description="Reset channel conversation")
+    @commands.hybrid_command(name="reset_chat", description="Reset channel memory")
     async def reset_chat(self, ctx):
-        self.channel_context[ctx.channel.id] = []
-        await ctx.send("🕷️ Cleared the vibe in this channel.", ephemeral=True)
+        await self.channel_collection.delete_one({"channel_id": ctx.channel.id})
+        self.channel_memory_cache.pop(ctx.channel.id, None)
+        await ctx.send("🕷️ Cleared the vibe here.", ephemeral=True)
 
-    @commands.hybrid_command(name="reset_me", description="Reset your personal memory")
+    @commands.hybrid_command(name="reset_me", description="Reset your memory")
     async def reset_me(self, ctx):
-        self.user_memory[ctx.author.id] = []
-        await ctx.send("💙 Fresh start. I won’t hold the past against you.", ephemeral=True)
+        await self.user_collection.delete_one({"user_id": ctx.author.id})
+        self.user_memory_cache.pop(ctx.author.id, None)
+        await ctx.send("💙 Fresh start. No past baggage.", ephemeral=True)
 
-    @commands.hybrid_command(name="set_model", description="Set AI model (Admin only)")
-    @commands.has_permissions(administrator=True)
-    async def set_model(self, ctx, model_name: str):
-        available_models = [
-            "llama-3.1-8b-instant",
-            "llama-3.3-70b-versatile",
-            "gemma-7b-it",
-            "mixtral-8x7b-32768",
-        ]
-
-        if model_name not in available_models:
-            await ctx.send(
-                f"❌ Invalid model.\nAvailable: {', '.join(available_models)}",
-                ephemeral=True
-            )
-            return
-
-        self.model = model_name
-        await ctx.send(f"✅ Model set to **{model_name}**", ephemeral=True)
-
-# ------------------------------------------------------------------
+# ======================================================
 # SETUP
-# ------------------------------------------------------------------
+# ======================================================
 
 async def setup(bot):
     await bot.add_cog(AIChatCog(bot))
-    logger.info("Gwen Stacy AI cog loaded")
+    logger.info("🕷️ Gwen Stacy AI cog ready")
