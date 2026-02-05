@@ -249,11 +249,13 @@ def create_bot():
             try:
                 # Calculate time until next 8 AM in IST timezone
                 now = datetime.now(IST)
-                next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
                 
                 # If it's already past 8 AM today, schedule for tomorrow
+                # Otherwise schedule for today at 8 AM
                 if now.hour >= 8:
-                    next_8am = next_8am + timedelta(days=1)
+                    next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+                else:
+                    next_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
                 
                 seconds_until_8am = (next_8am - now).total_seconds()
                 
@@ -347,7 +349,6 @@ def create_bot():
             logger.info(f"Waiting {seconds_until_midnight:.6f} seconds until next midnight birthday check")
             
             # Calculate time until next 8 AM
-            next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
             if now.hour >= 8:
                 next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
             else:

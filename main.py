@@ -16,6 +16,8 @@ The bot runs both a Discord bot and a web interface simultaneously.
 import os
 import logging
 import asyncio
+import time
+import discord
 from dotenv import load_dotenv
 
 # ============================================================================
@@ -120,6 +122,67 @@ def main():
     # ============================================================================
     # ERROR HANDLING SECTION
     # ============================================================================
+    
+    except discord.errors.HTTPException as e:
+        """
+        Handle Discord HTTP errors (including rate limiting)
+        """
+        if e.status == 429:
+            logger.error("=" * 80)
+            logger.error("🚫 DISCORD RATE LIMIT ERROR (429)")
+            logger.error("=" * 80)
+            logger.error("")
+            logger.error("Your bot is being rate-limited by Discord. Common causes:")
+            logger.error("")
+            logger.error("1. ⚠️  INVALID OR COMPROMISED TOKEN")
+            logger.error("   → Your Discord token may be revoked or flagged")
+            logger.error("   → Go to: https://discord.com/developers/applications")
+            logger.error("   → Select your bot → 'Bot' → Click 'Reset Token'")
+            logger.error("   → Update DISCORD_TOKEN in your .env or Render environment")
+            logger.error("")
+            logger.error("2. 🔄 RAPID RESTART LOOP")
+            logger.error("   → Bot keeps crashing and restarting too quickly")
+            logger.error("   → Discord blocks IPs that reconnect too frequently")
+            logger.error("   → Wait 10-15 minutes before trying again")
+            logger.error("")
+            logger.error("3. 📝 TOKEN EXPOSED IN GIT")
+            logger.error("   → If your token was committed to GitHub, Discord auto-revokes it")
+            logger.error("   → Check git history: git log -p | grep -i discord_token")
+            logger.error("   → Always use .env files and add them to .gitignore")
+            logger.error("")
+            logger.error("4. 🌐 SHARED IP FLAGGED (Render/Heroku)")
+            logger.error("   → Hosting providers' shared IPs may be temporarily blocked")
+            logger.error("   → Reset your token and try deploying again")
+            logger.error("")
+            logger.error("=" * 80)
+            logger.error("⏱️  Waiting 60 seconds before retry to avoid further rate limiting...")
+            logger.error("=" * 80)
+            
+            # Wait before retrying to avoid making the rate limit worse
+            time.sleep(60)
+        else:
+            logger.error(f"❌ Discord HTTP error ({e.status}): {str(e)}")
+            logger.error(f"Full error details: {e.text if hasattr(e, 'text') else 'No additional details'}")
+    
+    except discord.errors.LoginFailure:
+        """
+        Handle invalid token error
+        """
+        logger.error("=" * 80)
+        logger.error("🔑 INVALID DISCORD TOKEN")
+        logger.error("=" * 80)
+        logger.error("")
+        logger.error("The Discord token in your environment variables is invalid.")
+        logger.error("")
+        logger.error("Steps to fix:")
+        logger.error("1. Go to https://discord.com/developers/applications")
+        logger.error("2. Select your bot application")
+        logger.error("3. Go to the 'Bot' section")
+        logger.error("4. Click 'Reset Token' to generate a new one")
+        logger.error("5. Update DISCORD_TOKEN in your .env file or Render environment")
+        logger.error("")
+        logger.error("⚠️  NEVER share your token or commit it to Git!")
+        logger.error("=" * 80)
     
     except KeyboardInterrupt:
         """
