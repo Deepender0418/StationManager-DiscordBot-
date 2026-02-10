@@ -1,9 +1,50 @@
-discord.py
-motor
-python-dotenv
-Flask
-aiohttp
-pytz
-dnspython
-PyNaCl
-groq
+# ============================================================================
+# CORE DEPENDENCIES
+# ============================================================================
+# Discord.py - Discord API wrapper
+discord.py>=2.3.2,<3.0.0
+
+# Motor - Async MongoDB driver
+motor>=3.3.2,<4.0.0
+
+# Python-dotenv - Environment variable loading
+python-dotenv==1.0.0
+
+# PyNaCl - Voice support for Discord.py
+PyNaCl>=1.5.0,<2.0.0
+
+# DNSPython - Required for MongoDB SRV connections
+dnspython>=2.4.2,<3.0.0
+
+# PyTZ - Timezone support
+pytz>=2024.1
+
+# ============================================================================
+# WEB SERVER DEPENDENCIES
+# ============================================================================
+# Flask - Web framework
+Flask>=3.0.0,<4.0.0
+
+# Waitress - Production WSGI server (replaces Flask dev server)
+waitress>=2.1.2,<3.0.0
+
+# Flask-Limiter - Rate limiting for web endpoints
+Flask-Limiter>=3.5.0,<4.0.0
+
+# Flask-WTF - CSRF protection for forms
+Flask-WTF>=1.2.1,<2.0.0
+
+# ============================================================================
+# AI CHAT DEPENDENCIES
+# ============================================================================
+# GROQ - AI API client
+groq>=0.4.1,<1.0.0
+
+# Aiohttp - Async HTTP client
+aiohttp>=3.9.1,<4.0.0
+
+# ============================================================================
+# SECURITY & UTILITIES
+# ============================================================================
+# Cryptography - For secure secret generation
+cryptography>=41.0.7,<42.0.0

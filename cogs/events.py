@@ -253,15 +253,18 @@ class EventsCog(commands.Cog):
             # Send announcement to all guilds the bot is in
             for guild in self.bot.guilds:
                 try:
-                    # Get guild configuration for announcement settings
+                    # Get guild configuration for events settings
                     config = await get_guild_config(self.bot.guild_configs, str(guild.id))
-                    announcement_channel_id = config.get('announcement_channel_id') if config else None
+                    # Try events_channel_id first, fallback to announcement_channel_id for backward compatibility
+                    events_channel_id = config.get('events_channel_id') if config else None
+                    if not events_channel_id:
+                        events_channel_id = config.get('announcement_channel_id') if config else None
                     
-                    if not announcement_channel_id:
-                        continue  # Skip guilds without announcement channel
+                    if not events_channel_id:
+                        continue  # Skip guilds without events channel
                     
-                    announcement_channel = self.bot.get_channel(int(announcement_channel_id))
-                    if not announcement_channel:
+                    events_channel = self.bot.get_channel(int(events_channel_id))
+                    if not events_channel:
                         continue  # Skip if channel not found
                     
                     # ============================================================================
@@ -284,12 +287,12 @@ class EventsCog(commands.Cog):
                             inline=False
                         )
                     
-                    # Set embed styling
+                    # Set embed styling with bot thumbnail
                     embed.set_footer(text=f"📅 {datetime.now(IST).strftime('%B %d, %Y')} • Daily Events")
-                    # Removed invalid emoji URL; add a valid image URL if desired
+                    embed.set_thumbnail(url=self.bot.user.avatar.url if self.bot.user.avatar else self.bot.user.default_avatar.url)
                     
-                    # Send announcement with @everyone mention
-                    await announcement_channel.send(content="@everyone", embed=embed)
+                    # Send announcement
+                    await events_channel.send(embed=embed)
                     logger.info(f"Sent daily events announcement to {guild.name}")
                     
                 except Exception as e:
@@ -321,17 +324,20 @@ class EventsCog(commands.Cog):
             # CHANNEL VALIDATION SECTION
             # ============================================================================
             
-            # First check if announcement channel is configured
+            # First check if events channel is configured
             config = await get_guild_config(self.bot.guild_configs, str(ctx.guild.id))
-            announcement_channel_id = config.get('announcement_channel_id') if config else None
+            # Try events_channel_id first, fallback to announcement_channel_id for backward compatibility
+            events_channel_id = config.get('events_channel_id') if config else None
+            if not events_channel_id:
+                events_channel_id = config.get('announcement_channel_id') if config else None
             
-            if not announcement_channel_id:
-                await ctx.send("❌ Announcement channel not configured! Set it with `/config announcement #channel`", ephemeral=True)
+            if not events_channel_id:
+                await ctx.send("❌ Events channel not configured! Set it with `/config events #channel`", ephemeral=True)
                 return
             
-            announcement_channel = self.bot.get_channel(int(announcement_channel_id))
-            if not announcement_channel:
-                await ctx.send("❌ Announcement channel not found! It might have been deleted.", ephemeral=True)
+            events_channel = self.bot.get_channel(int(events_channel_id))
+            if not events_channel:
+                await ctx.send("❌ Events channel not found! It might have been deleted.", ephemeral=True)
                 return
             
             await ctx.send("📅 Testing daily events announcement...", ephemeral=True)
@@ -366,13 +372,13 @@ class EventsCog(commands.Cog):
                     inline=False
                 )
             
-            # Set embed styling with test indicator
+            # Set embed styling with test indicator and bot thumbnail
             embed.set_footer(text=f"📅 {datetime.now(IST).strftime('%B %d, %Y')} • Daily Events • (TEST)")
-            # Removed invalid emoji URL; add a valid image URL if desired
+            embed.set_thumbnail(url=self.bot.user.avatar.url if self.bot.user.avatar else self.bot.user.default_avatar.url)
             
             # Send test announcement
-            await announcement_channel.send(content="@everyone", embed=embed)
-            await ctx.send(f"✅ Daily events test announcement sent to {announcement_channel.mention}!", ephemeral=True)
+            await events_channel.send(embed=embed)
+            await ctx.send(f"✅ Daily events test announcement sent to {events_channel.mention}!", ephemeral=True)
             
         except Exception as e:
             await ctx.send(f"❌ Error: {str(e)}", ephemeral=True)

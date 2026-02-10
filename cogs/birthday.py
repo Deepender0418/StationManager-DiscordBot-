@@ -103,18 +103,22 @@ class BirthdayCog(commands.Cog):
                     if not guild:
                         continue
                     
-                    # Get guild configuration for announcement settings
+                    # Get guild configuration for birthday settings
                     config = await get_guild_config(self.bot.guild_configs, str(guild_id))
-                    announcement_channel_id = config.get('announcement_channel_id') if config else None
+                    # Try birthday_channel_id first, fallback to announcement_channel_id for backward compatibility
+                    birthday_channel_id = config.get('birthday_channel_id') if config else None
+                    if not birthday_channel_id:
+                        birthday_channel_id = config.get('announcement_channel_id') if config else None
+                    
                     default_message = config.get('birthday_message', "🎉 **Happy Birthday {USER_MENTION}!** 🎉\nHope you have an amazing day!")
                     
-                    if not announcement_channel_id:
-                        logger.warning(f"No announcement channel configured for guild {guild_id}")
+                    if not birthday_channel_id:
+                        logger.warning(f"No birthday channel configured for guild {guild_id}")
                         continue
                     
-                    announcement_channel = self.bot.get_channel(int(announcement_channel_id))
-                    if not announcement_channel:
-                        logger.warning(f"Announcement channel not found for guild {guild_id}")
+                    birthday_channel = self.bot.get_channel(int(birthday_channel_id))
+                    if not birthday_channel:
+                        logger.warning(f"Birthday channel not found for guild {guild_id}")
                         continue
                     
                     # Create birthday announcement for all members
@@ -151,8 +155,8 @@ class BirthdayCog(commands.Cog):
                         embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
                         embed.set_footer(text=f"🎈 {member.display_name} is celebrating today!")
                         
-                        # Send @everyone outside the embed, custom message inside
-                        await announcement_channel.send(content="@everyone", embed=embed)
+                        # Send birthday announcement
+                        await birthday_channel.send(embed=embed)
                         logger.info(f"Sent birthday announcement for {member.display_name} in {guild.name}")
                     
                 except Exception as e:
@@ -367,18 +371,21 @@ class BirthdayCog(commands.Cog):
             if member is None:
                 member = ctx.author
             
-            # Get guild configuration for announcement settings
+            # Get guild configuration for birthday settings
             config = await get_guild_config(self.bot.guild_configs, str(ctx.guild.id))
             
-            # Get announcement channel
-            announcement_channel_id = config.get('announcement_channel_id') if config else None
-            if not announcement_channel_id:
-                await ctx.send("❌ Announcement channel not configured! Set it with `/config announcement #channel`", ephemeral=True)
+            # Get birthday channel (try birthday_channel_id first, fallback to announcement_channel_id)
+            birthday_channel_id = config.get('birthday_channel_id') if config else None
+            if not birthday_channel_id:
+                birthday_channel_id = config.get('announcement_channel_id') if config else None
+            
+            if not birthday_channel_id:
+                await ctx.send("❌ Birthday channel not configured! Set it with `/config birthday #channel`", ephemeral=True)
                 return
             
-            announcement_channel = self.bot.get_channel(int(announcement_channel_id))
-            if not announcement_channel:
-                await ctx.send("❌ Announcement channel not found! It might have been deleted.", ephemeral=True)
+            birthday_channel = self.bot.get_channel(int(birthday_channel_id))
+            if not birthday_channel:
+                await ctx.send("❌ Birthday channel not found! It might have been deleted.", ephemeral=True)
                 return
             
             # Get user's custom message if available
@@ -403,9 +410,9 @@ class BirthdayCog(commands.Cog):
             embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
             embed.set_footer(text=f"🎈 {member.display_name} is celebrating today! (Test)")
             
-            # Send @everyone outside the embed, custom message inside
-            await announcement_channel.send(content="@everyone", embed=embed)
-            await ctx.send(f"✅ Test birthday announcement sent to {announcement_channel.mention}!", ephemeral=True)
+            # Send test birthday announcement
+            await birthday_channel.send(embed=embed)
+            await ctx.send(f"✅ Test birthday announcement sent to {birthday_channel.mention}!", ephemeral=True)
             
         except Exception as e:
             # Handle database connection errors gracefully

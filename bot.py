@@ -86,8 +86,9 @@ def create_bot():
         bot.invite_cache = {}                  # Cache for invite tracking
         bot.mongo_client = client              # Store client for cleanup
         
-        # Flag to prevent duplicate background task creation
+        # Flags and locks for background task management
         bot.tasks_started = False
+        bot.task_lock = asyncio.Lock()  # Thread-safe lock for task startup
         
         logger.info("✅ MongoDB collections configured successfully")
         
@@ -334,32 +335,33 @@ def create_bot():
             except Exception as e:
                 logger.error(f"❌ Error initializing config for {guild.name}: {str(e)}")
         
-        # Start background tasks only once (prevent duplicates)
-        if not bot.tasks_started:
-            bot.loop.create_task(check_birthdays_at_midnight())
-            bot.loop.create_task(check_daily_events_at_8am())
-            
-            logger.info("🎂 Birthday check task started")
-            logger.info("📅 Daily events check task started (8 AM)")
-            
-            # Calculate and log timing information
-            now = datetime.now(IST)
-            next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            seconds_until_midnight = (next_midnight - now).total_seconds()
-            logger.info(f"Waiting {seconds_until_midnight:.6f} seconds until next midnight birthday check")
-            
-            # Calculate time until next 8 AM
-            if now.hour >= 8:
-                next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+        # Start background tasks only once (prevent duplicates with thread-safe lock)
+        async with bot.task_lock:
+            if not bot.tasks_started:
+                bot.loop.create_task(check_birthdays_at_midnight())
+                bot.loop.create_task(check_daily_events_at_8am())
+                
+                logger.info("🎂 Birthday check task started")
+                logger.info("📅 Daily events check task started (8 AM)")
+                
+                # Calculate and log timing information
+                now = datetime.now(IST)
+                next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                seconds_until_midnight = (next_midnight - now).total_seconds()
+                logger.info(f"Waiting {seconds_until_midnight:.6f} seconds until next midnight birthday check")
+                
+                # Calculate time until next 8 AM
+                if now.hour >= 8:
+                    next_8am = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+                else:
+                    next_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+                
+                seconds_until_8am = (next_8am - now).total_seconds()
+                logger.info(f"Waiting {seconds_until_8am:.6f} seconds until next 8 AM events check")
+                
+                bot.tasks_started = True
             else:
-                next_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
-            
-            seconds_until_8am = (next_8am - now).total_seconds()
-            logger.info(f"Waiting {seconds_until_8am:.6f} seconds until next 8 AM events check")
-            
-            bot.tasks_started = True
-        else:
-            logger.info("🔄 Background tasks already running, skipping duplicate creation")
+                logger.info("🔄 Background tasks already running, skipping duplicate creation")
 
     @bot.event
     async def on_disconnect():
@@ -593,8 +595,10 @@ def create_bot():
                 # Send the template info (ignore errors if we can't send)
                 try:
                     await message.channel.send(embed=embed, delete_after=10)
-                except:
-                    pass  # Ignore if we can't send the message
+                except discord.HTTPException as e:
+                    logger.debug(f"Could not send autocomplete message: {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error sending autocomplete: {e}", exc_info=True)
 
     return bot
 

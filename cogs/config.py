@@ -88,7 +88,7 @@ class ConfigCog(commands.Cog):
             channel: The Discord channel to use for this configuration
         """
         # Define valid configuration types
-        valid_types = ['welcome', 'log', 'announcement']
+        valid_types = ['welcome', 'log', 'announcement', 'birthday', 'events']
         
         # Validate the configuration type
         if config_type.lower() not in valid_types:
@@ -172,7 +172,7 @@ class ConfigCog(commands.Cog):
                 embed.set_image(url=ctx.guild.banner.url)
             
             # Send test welcome message
-            await welcome_channel.send(content="@everyone", embed=embed)
+            await welcome_channel.send(embed=embed)
             await ctx.send(f"✅ Test welcome message sent to {welcome_channel.mention}!", ephemeral=True)
             
         except Exception as e:
@@ -224,58 +224,40 @@ class ConfigCog(commands.Cog):
             # BOT INTRODUCTION EMBED CREATION SECTION
             # ============================================================================
             
-            # Create casual and friendly bot introduction with inspiring quote
+            # Create casual and friendly bot introduction
             embed = discord.Embed(
-                title="🌟 A New Beginning Awaits! 🌟",
-                description="*\"Every great journey begins with a single step, and every amazing community starts with a warm welcome.\"* ✨\n\n**Hey everyone! 👋**\n\nI'm your friendly **Server Manager Bot**, and I'm super excited to be here with you all! I'm here to make this server awesome and help create a great community experience. Here's what I can do for you:",
+                title="🤖 Server Manager Bot",
+                description="Hi everyone! 👋 I'm here to help manage this server and make it awesome! Here's what I can do:",
                 color=discord.Color.purple(),
                 timestamp=ctx.message.created_at
             )
             
-            # Add mission statement
-            embed.add_field(
-                name="💫 Our Mission",
-                value="*\"Building connections, celebrating moments, and creating memories together.\"*",
-                inline=False
-            )
-            
-            # ============================================================================
-            # FEATURE HIGHLIGHTS SECTION
-            # ============================================================================
-            
             # Birthday celebrations feature
             embed.add_field(
-                name="🎂 **Birthday Celebrations**",
-                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🕛 **Automatic celebrations** at midnight!\n• 📝 **Easy setup** with `/birthday MM-DD`\n• 🎨 **Beautiful announcements** with custom messages\n• 🎁 **Individual birthday cards** for each person\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                inline=False
+                name="🎂 Birthday Celebrations",
+                value="• Automatic celebrations at midnight\n• Custom birthday messages\n• Beautiful announcements with avatars",
+                inline=True
             )
             
             # Daily events feature
             embed.add_field(
-                name="📅 **Daily Events & Fun**",
-                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🌅 **Morning updates** at 8 AM every day!\n• 🎉 **Holidays & observances** to keep you informed\n• 📚 **Learn about special events** and celebrations\n• ⏰ **Never miss** a special day again!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                inline=False
+                name="📅 Daily Events",
+                value="• Morning updates at 8 AM\n• Holiday reminders\n• Special observances",
+                inline=True
             )
             
             # Welcome system feature
             embed.add_field(
-                name="🌟 **Welcome New Friends**",
-                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🤗 **Warm welcomes** for new members\n• 🎨 **Beautiful, respectful** welcome cards\n• 💝 **Makes everyone feel valued** and appreciated\n• 🌈 **Creates a friendly atmosphere** for all\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                inline=False
+                name="🌟 Welcome System",
+                value="• Warm welcomes for new members\n• Beautiful welcome cards\n• Rotating welcome messages",
+                inline=True
             )
             
             # Management tools feature
             embed.add_field(
-                name="⚙️ **Easy Management**",
-                value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• 🛠️ **Simple commands** to set up channels\n• 🌐 **Web interface** for easy configuration\n• 🧪 **Admin commands** for testing features\n• 🎯 **Everything designed** to be user-friendly\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                inline=False
-            )
-            
-            # Add closing quote
-            embed.add_field(
-                name="💝 **Together We Grow**",
-                value="*\"The best communities are built on friendship, celebration, and shared moments.\"* 🌟",
-                inline=False
+                name="⚙️ Easy Management",
+                value="• Simple `/config` commands\n• Web dashboard for configuration\n• Admin testing tools",
+                inline=True
             )
             
             # Set footer with casual tone and bot information
@@ -285,7 +267,7 @@ class ConfigCog(commands.Cog):
             )
             
             # Send the bot introduction
-            await announcement_channel.send(content="@everyone", embed=embed)
+            await announcement_channel.send(embed=embed)
             await ctx.send(f"✅ Bot introduction sent to {announcement_channel.mention}!", ephemeral=True)
             
             logger.info(f"=== BOTINTRO COMMAND COMPLETED SUCCESSFULLY ===")
